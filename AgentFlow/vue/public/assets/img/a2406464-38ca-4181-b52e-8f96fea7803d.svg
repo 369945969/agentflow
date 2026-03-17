@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg">
+<!-- 开始 -> 客服助手 -->
+<path d="M 268 76 Q 300 76 320 76" fill="none" marker-end="url(#arrowhead)" stroke="#3B9BFF" stroke-width="2"></path>
+<!-- 客服助手 -> 情感分析师 -->
+<path d="M 536 76 Q 568 76 600 76" fill="none" marker-end="url(#arrowhead)" stroke="#3B9BFF" stroke-width="2"></path>
+<!-- 情感分析师 -> 条件分支 -->
+<path d="M 628 96 Q 628 150 516 150" fill="none" marker-end="url(#arrowhead)" stroke="#87B4FF" stroke-width="2"></path>
+<!-- 条件分支 -> 结束 -->
+<path d="M 688 216 Q 720 216 720 216" fill="none" marker-end="url(#arrowhead)" stroke="#FFB846" stroke-width="2"></path>
+<defs>
+<marker id="arrowhead" markerheight="7" markerunits="strokeWidth" markerwidth="10" orient="auto" refx="9" refy="3.5">
+<polygon fill="#3B9BFF" points="0 0, 10 3.5, 0 7"></polygon>
+</marker>
+</defs>
+</svg>

@@ -1,0 +1,24 @@
+import { createApp } from 'vue'
+import './style.css'
+import App from './App.vue'
+import { createRouter, createWebHistory } from 'vue-router'
+
+const routes = [
+  { path: '/', component: () => import('./views/Dashboard.vue') },
+  { path: '/agent-management', component: () => import('./views/AgentManagement.vue') },
+  { path: '/chat-interface', component: () => import('./views/ChatInterface.vue') },
+  { path: '/execution-monitor', component: () => import('./views/ExecutionMonitor.vue') },
+  { path: '/model-management', component: () => import('./views/ModelManagement.vue') },
+  { path: '/orchestration-editor', component: () => import('./views/OrchestrationEditor.vue') },
+  { path: '/schedule-tasks', component: () => import('./views/ScheduleTasks.vue') },
+  { path: '/skill-management', component: () => import('./views/SkillManagement.vue') },
+]
+
+const router = createRouter({
+  history: createWebHistory(),
+  routes,
+})
+
+const app = createApp(App)
+app.use(router)
+app.mount('#app')

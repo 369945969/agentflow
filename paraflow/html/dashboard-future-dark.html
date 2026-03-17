@@ -1,0 +1,506 @@
+<!DOCTYPE html><html><head>
+    <style>@layer theme, base, paraflow, components, utilities;</style><meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    
+    
+    
+    <style id="moxt-styled">@layer paraflow{@import url('assets/css/css2_e81fbff7.css')
+}</style>
+<!--FontAwesome version: 6.7.2--><link rel="stylesheet" href="assets/css/font-awesome.672.css"><!--Tailwind version: 4.0.17--><script src="assets/js/tailwind.js"></script><!--iconify-icon version: 3.0.0--><script src="assets/js/iconify-icon-3.0.0.js"></script></head>
+<body id="17:1" title="dashboard-future-dark.html" orderindex="80" relativetransform="3060, 125" class="font-[-apple-system,BlinkMacSystemFont,'Segoe UI'] w-[1440px] min-h-[900px]" style="background-color: rgba(0, 0, 0, 1); line-height: 1.5;">
+
+<header id="17:2" orderindex="80" style="background-color: rgba(0, 0, 0, 1); border-bottom-style: solid; padding: 1rem 2rem; border-color: rgba(0, 229, 255, 1);" class="w-full border-b-[1px]">
+<nav id="17:3" orderindex="80" class="flex justify-between items-center gap-y-8 gap-x-8 w-full">
+
+<div id="17:4" orderindex="80" class="flex items-center gap-y-10 gap-x-10">
+
+<div id="17:5" orderindex="80" class="flex items-center gap-y-3 gap-x-3">
+<div id="17:6" orderindex="80" style="background-color: rgba(198, 255, 0, 1);" class="flex justify-center items-center w-10 h-10">
+<iconify-icon id="17:7" orderindex="80" style="color: rgba(0, 0, 0, 1);" icon="lucide:workflow" class="text-xl"></iconify-icon>
+</div>
+<span id="17:8" orderindex="81" style="color: color-mix( in oklab , #fff 95% , transparent );" class="text-xl font-semibold">AgentFlow</span>
+</div>
+
+<div id="17:9" orderindex="81" style="background-color: rgba(0, 0, 0, 1); padding: 0.5rem 1rem; border-color: rgba(0, 229, 255, 1);" class="flex items-center gap-y-2 gap-x-2 w-96 border-[1px] border-solid">
+<div id="17:10" orderindex="80" class="flex justify-center items-center w-5 h-5">
+<iconify-icon id="17:11" orderindex="80" style="color: rgba(0, 229, 255, 1);" icon="lucide:search" class="text-base"></iconify-icon>
+</div>
+<input id="17:12" orderindex="81" style="flex-basis: 0%; color: color-mix( in oklab , #fff 95% , transparent );" type="text" placeholder="搜索Agent、编排、任务..." class="bg-transparent grow shrink outline-none">
+</div>
+</div>
+
+<div id="17:13" orderindex="81" class="flex items-center gap-y-4 gap-x-4">
+
+<div id="17:14" orderindex="80" style="background-color: rgba(0, 0, 0, 1); padding: 0.5rem 1rem; border-color: rgba(0, 229, 255, 1);" class="flex items-center gap-y-2 gap-x-2 border-[1px] border-solid">
+<div id="17:15" orderindex="80" class="flex justify-center items-center w-5 h-5">
+<iconify-icon id="17:16" orderindex="80" style="color: rgba(0, 229, 255, 1);" icon="lucide:plus" class="text-base"></iconify-icon>
+</div>
+<span id="17:17" orderindex="81" style="color: color-mix( in oklab , #fff 95% , transparent );" class="font-semibold">快速创建</span>
+<div id="17:18" orderindex="82" class="flex justify-center items-center w-5 h-5">
+<iconify-icon id="17:19" orderindex="80" style="color: rgba(0, 229, 255, 1);" icon="lucide:chevron-down" class="text-base"></iconify-icon>
+</div>
+</div>
+
+<div id="17:20" orderindex="81" class="hover:bg-[#00E5FF]/10 flex relative justify-center items-center w-12 h-12 border-[1px] border-solid" style="border-color: rgba(0, 229, 255, 1);">
+<iconify-icon id="17:21" orderindex="80" style="color: color-mix( in oklab , #fff 95% , transparent );" icon="lucide:bell" class="w-6 h-6"></iconify-icon>
+<div id="17:22" orderindex="81" style="background-color: rgba(255, 109, 0, 1); border-color: rgba(0, 0, 0, 1);" class="flex absolute -top-1 -right-1 justify-center items-center w-6 h-6 border-[2px] border-solid">
+<span id="17:23" orderindex="80" style="color: rgba(255, 255, 255, 1);" class="text-xs font-semibold">5</span>
+</div>
+</div>
+
+<div id="17:24" orderindex="82" class="flex items-center gap-y-2 gap-x-2">
+<img id="17:25" orderindex="80" style="filter: brightness(90%) contrast(90%); border-color: rgba(0, 229, 255, 1);" alt="User avatar profile photo" src="assets/img/f9b198d7-135a-4125-9e9c-dcf14653f5ee.jpeg" class="w-10 h-10 object-cover border-[2px] border-solid rounded-full">
+<div id="17:26" orderindex="81" class="flex justify-center items-center w-6 h-6">
+<iconify-icon id="17:27" orderindex="80" style="color: color-mix( in oklab , #fff 70% , transparent );" icon="lucide:chevron-down"></iconify-icon>
+</div>
+</div>
+</div>
+</nav>
+</header>
+
+<div id="17:28" orderindex="81" class="flex w-full min-h-[856px]">
+
+<aside id="17:29" orderindex="80" style="background-color: rgba(0, 0, 0, 1); border-right-style: solid; border-color: rgba(0, 229, 255, 1);" class="shrink-0 w-64 min-w-fit border-r-[1px]">
+<div id="17:30" orderindex="80" class="flex flex-col gap-y-2 gap-x-2 p-6">
+
+<div id="17:31" orderindex="80" style="color: rgba(198, 255, 0, 1); border-left-color: rgba(198, 255, 0, 1); border-left-style: solid;" class="flex items-center gap-y-3 gap-x-3 pt-3 pb-3 pl-4 border-l-[4px]">
+<div id="17:32" orderindex="80" class="flex justify-center items-center w-5 h-5">
+<iconify-icon id="17:33" orderindex="80" icon="lucide:layout-dashboard" class="text-base"></iconify-icon>
+</div>
+<span id="17:34" orderindex="81" class="font-semibold">系统监控</span>
+</div>
+
+<div id="17:35" orderindex="81" class="hover:text-[#C6FF00] flex items-center gap-y-3 gap-x-3 pt-3 pb-3 pl-4" style="color: color-mix( in oklab , #fff 70% , transparent );">
+<div id="17:36" orderindex="80" class="flex justify-center items-center w-5 h-5">
+<iconify-icon id="17:37" orderindex="80" icon="lucide:users" class="text-base"></iconify-icon>
+</div>
+<span id="17:38" orderindex="81">Agent管理</span>
+</div>
+<div id="17:39" orderindex="82" class="hover:text-[#C6FF00] flex items-center gap-y-3 gap-x-3 pt-3 pb-3 pl-4" style="color: color-mix( in oklab , #fff 70% , transparent );">
+<div id="17:40" orderindex="80" class="flex justify-center items-center w-5 h-5">
+<iconify-icon id="17:41" orderindex="80" icon="lucide:brain" class="text-base"></iconify-icon>
+</div>
+<span id="17:42" orderindex="81">模型管理</span>
+</div>
+<div id="17:43" orderindex="83" class="hover:text-[#C6FF00] flex items-center gap-y-3 gap-x-3 pt-3 pb-3 pl-4" style="color: color-mix( in oklab , #fff 70% , transparent );">
+<div id="17:44" orderindex="80" class="flex justify-center items-center w-5 h-5">
+<iconify-icon id="17:45" orderindex="80" icon="lucide:workflow" class="text-base"></iconify-icon>
+</div>
+<span id="17:46" orderindex="81">编排画布</span>
+</div>
+<div id="17:47" orderindex="84" class="hover:text-[#C6FF00] flex items-center gap-y-3 gap-x-3 pt-3 pb-3 pl-4" style="color: color-mix( in oklab , #fff 70% , transparent );">
+<div id="17:48" orderindex="80" class="flex justify-center items-center w-5 h-5">
+<iconify-icon id="17:49" orderindex="80" icon="lucide:calendar-clock" class="text-base"></iconify-icon>
+</div>
+<span id="17:50" orderindex="81">定时任务</span>
+</div>
+<div id="17:51" orderindex="85" class="hover:text-[#C6FF00] flex items-center gap-y-3 gap-x-3 pt-3 pb-3 pl-4" style="color: color-mix( in oklab , #fff 70% , transparent );">
+<div id="17:52" orderindex="80" class="flex justify-center items-center w-5 h-5">
+<iconify-icon id="17:53" orderindex="80" icon="lucide:history" class="text-base"></iconify-icon>
+</div>
+<span id="17:54" orderindex="81">执行历史</span>
+</div>
+<div id="17:55" orderindex="86" class="hover:text-[#C6FF00] flex items-center gap-y-3 gap-x-3 pt-3 pb-3 pl-4" style="color: color-mix( in oklab , #fff 70% , transparent );">
+<div id="17:56" orderindex="80" class="flex justify-center items-center w-5 h-5">
+<iconify-icon id="17:57" orderindex="80" icon="lucide:message-circle" class="text-base"></iconify-icon>
+</div>
+<span id="17:58" orderindex="81">对话界面</span>
+</div>
+
+<div id="17:59" orderindex="87" style="border-top-style: solid; border-color: rgba(0, 229, 255, 1);" class="mt-4 mb-4 border-t-[1px]"></div>
+<div id="17:60" orderindex="88" class="hover:text-[#C6FF00] flex items-center gap-y-3 gap-x-3 pt-3 pb-3 pl-4" style="color: color-mix( in oklab , #fff 70% , transparent );">
+<div id="17:61" orderindex="80" class="flex justify-center items-center w-5 h-5">
+<iconify-icon id="17:62" orderindex="80" icon="lucide:settings" class="text-base"></iconify-icon>
+</div>
+<span id="17:63" orderindex="81">系统设置</span>
+</div>
+</div>
+</aside>
+
+<main id="17:64" orderindex="81" style="flex-basis: 0%;" class="overflow-x-hidden flex flex-col grow shrink gap-y-8 gap-x-8 p-8">
+
+<div id="17:65" orderindex="80" class="flex justify-between items-center">
+<h1 id="17:66" orderindex="80" style="color: color-mix( in oklab , #fff 95% , transparent );" class="text-2xl font-semibold">系统监控总览</h1>
+<div id="17:67" orderindex="81" class="flex items-center gap-y-4 gap-x-4">
+<span id="17:68" orderindex="80" style="color: color-mix( in oklab , #fff 50% , transparent );">实时更新：2分钟前</span>
+<button id="17:69" orderindex="81" class="hover:bg-[#00E5FF]/10 flex items-center gap-y-2 gap-x-2 border-[1px] border-solid" style="background-color: rgba(0, 0, 0, 1); color: color-mix( in oklab , #fff 95% , transparent ); padding: 0.5rem 1rem; border-color: rgba(0, 229, 255, 1);">
+<div id="17:70" orderindex="80" class="flex justify-center items-center w-5 h-5">
+<iconify-icon id="17:71" orderindex="80" icon="lucide:refresh-cw" class="text-base"></iconify-icon>
+</div>
+<span id="17:72" orderindex="81">刷新</span>
+</button>
+</div>
+</div>
+
+<section id="17:73" orderindex="81" class="grid grid-cols-4 gap-y-6 gap-x-6">
+
+<div id="17:74" orderindex="80" style="background-color: rgba(0, 0, 0, 1); border-color: rgba(0, 229, 255, 1);" class="flex flex-col gap-y-4 gap-x-4 p-6 border-[1px] border-solid">
+<div id="17:75" orderindex="80" class="flex justify-between items-center">
+<div id="17:76" orderindex="80" style="background-color: color-mix( in oklab , #C6FF00 10% , transparent ); border-color: rgba(198, 255, 0, 1);" class="flex justify-center items-center w-12 h-12 border-[1px] border-solid">
+<iconify-icon id="17:77" orderindex="80" style="color: rgba(198, 255, 0, 1);" icon="lucide:play-circle" class="text-xl"></iconify-icon>
+</div>
+<span id="17:78" orderindex="81" style="color: rgba(76, 175, 80, 1);" class="text-sm">+12%</span>
+</div>
+<div id="17:79" orderindex="81" class="flex flex-col gap-y-1 gap-x-1">
+<span id="17:80" orderindex="80" style="color: color-mix( in oklab , #fff 95% , transparent );" class="text-3xl font-semibold">24</span>
+<span id="17:81" orderindex="81" style="color: color-mix( in oklab , #fff 70% , transparent );">实时运行任务</span>
+</div>
+</div>
+
+<div id="17:82" orderindex="81" style="background-color: rgba(0, 0, 0, 1); border-color: rgba(0, 229, 255, 1);" class="flex flex-col gap-y-4 gap-x-4 p-6 border-[1px] border-solid">
+<div id="17:83" orderindex="80" class="flex justify-between items-center">
+<div id="17:84" orderindex="80" style="background-color: color-mix( in oklab , #2196F3 10% , transparent ); border-color: rgba(33, 150, 243, 1);" class="flex justify-center items-center w-12 h-12 border-[1px] border-solid">
+<iconify-icon id="17:85" orderindex="80" style="color: rgba(33, 150, 243, 1);" icon="lucide:bar-chart-3" class="text-xl"></iconify-icon>
+</div>
+<span id="17:86" orderindex="81" style="color: rgba(76, 175, 80, 1);" class="text-sm">+8%</span>
+</div>
+<div id="17:87" orderindex="81" class="flex flex-col gap-y-1 gap-x-1">
+<span id="17:88" orderindex="80" style="color: color-mix( in oklab , #fff 95% , transparent );" class="text-3xl font-semibold">1,247</span>
+<span id="17:89" orderindex="81" style="color: color-mix( in oklab , #fff 70% , transparent );">今日执行总数</span>
+<div id="17:90" orderindex="82" class="text-sm flex items-center gap-y-2 gap-x-2">
+<span id="17:91" orderindex="80" style="color: rgba(76, 175, 80, 1);">成功: 1,186</span>
+<span id="17:92" orderindex="81" style="color: rgba(244, 67, 54, 1);">失败: 61</span>
+</div>
+</div>
+</div>
+
+<div id="17:93" orderindex="82" style="background-color: rgba(0, 0, 0, 1); border-color: rgba(0, 229, 255, 1);" class="flex flex-col gap-y-4 gap-x-4 p-6 border-[1px] border-solid">
+<div id="17:94" orderindex="80" class="flex justify-between items-center">
+<div id="17:95" orderindex="80" style="background-color: color-mix( in oklab , #FF6D00 10% , transparent ); border-color: rgba(255, 109, 0, 1);" class="flex justify-center items-center w-12 h-12 border-[1px] border-solid">
+<iconify-icon id="17:96" orderindex="80" style="color: rgba(255, 109, 0, 1);" icon="lucide:users" class="text-xl"></iconify-icon>
+</div>
+<span id="17:97" orderindex="81" style="color: color-mix( in oklab , #fff 50% , transparent );">稳定</span>
+</div>
+<div id="17:98" orderindex="81" class="flex flex-col gap-y-1 gap-x-1">
+<span id="17:99" orderindex="80" style="color: color-mix( in oklab , #fff 95% , transparent );" class="text-3xl font-semibold">36</span>
+<span id="17:100" orderindex="81" style="color: color-mix( in oklab , #fff 70% , transparent );">活跃Agent数量</span>
+</div>
+</div>
+
+<div id="17:101" orderindex="83" style="background-color: rgba(0, 0, 0, 1); border-color: rgba(0, 229, 255, 1);" class="flex flex-col gap-y-4 gap-x-4 p-6 border-[1px] border-solid">
+<div id="17:102" orderindex="80" class="flex justify-between items-center">
+<div id="17:103" orderindex="80" style="background-color: color-mix( in oklab , #FFC107 10% , transparent ); border-color: rgba(255, 193, 7, 1);" class="flex justify-center items-center w-12 h-12 border-[1px] border-solid">
+<iconify-icon id="17:104" orderindex="80" style="color: rgba(255, 193, 7, 1);" icon="lucide:timer" class="text-xl"></iconify-icon>
+</div>
+<span id="17:105" orderindex="81" style="color: rgba(244, 67, 54, 1);" class="text-sm">+15%</span>
+</div>
+<div id="17:106" orderindex="81" class="flex flex-col gap-y-1 gap-x-1">
+<span id="17:107" orderindex="80" style="color: color-mix( in oklab , #fff 95% , transparent );" class="text-3xl font-semibold">2.3s</span>
+<span id="17:108" orderindex="81" style="color: color-mix( in oklab , #fff 70% , transparent );">平均响应时间</span>
+</div>
+</div>
+</section>
+
+<div id="17:109" orderindex="82" class="grid grid-cols-3 gap-y-8 gap-x-8">
+
+<div id="17:110" orderindex="80" style="grid-column-start: span 2; grid-column-end: span 2;" class="flex flex-col gap-y-8 gap-x-8">
+
+<section id="17:111" orderindex="80" style="background-color: rgba(0, 0, 0, 1); border-color: rgba(0, 229, 255, 1);" class="flex flex-col gap-y-4 gap-x-4 p-6 border-[1px] border-solid">
+<div id="17:112" orderindex="80" class="flex justify-between items-center">
+<h2 id="17:113" orderindex="80" style="color: color-mix( in oklab , #fff 95% , transparent );" class="text-xl font-semibold">实时执行监控</h2>
+<button id="17:114" orderindex="81" class="hover:text-[#DEFF66] flex items-center" style="color: rgba(198, 255, 0, 1);">
+<span id="17:115" orderindex="80">查看全部</span>
+</button>
+</div>
+<div id="17:116" orderindex="81" class="flex flex-col gap-y-3 gap-x-3">
+
+<div id="17:117" orderindex="80" style="border-color: color-mix( in oklab , #00E5FF 50% , transparent );" class="flex justify-between items-center p-4 border-[1px] border-solid">
+<div id="17:118" orderindex="80" style="flex-basis: 0%;" class="flex flex-col grow shrink gap-y-1 gap-x-1">
+<div id="17:119" orderindex="80" class="flex items-center gap-y-3 gap-x-3">
+<span id="17:120" orderindex="80" style="color: color-mix( in oklab , #fff 95% , transparent );" class="font-semibold">客户数据分析流程</span>
+<div id="17:121" orderindex="81" style="background-color: rgba(76, 175, 80, 1); color: rgba(255, 255, 255, 1); padding: 0.25rem 0.5rem;" class="text-xs font-semibold">运行中</div>
+</div>
+<span id="17:122" orderindex="81" style="color: color-mix( in oklab , #fff 70% , transparent );" class="text-sm">执行ID: EXEC-2024-001</span>
+<span id="17:123" orderindex="82" style="color: color-mix( in oklab , #fff 50% , transparent );" class="text-sm">当前节点: 数据清洗 → 特征提取</span>
+<span id="17:124" orderindex="83" style="color: color-mix( in oklab , #fff 50% , transparent );" class="text-xs">开始时间: 14:23:15</span>
+</div>
+<div id="17:125" orderindex="81" class="flex items-center gap-y-2 gap-x-2">
+<button id="17:126" orderindex="80" class="hover:bg-[#00E5FF]/10 flex justify-center items-center w-8 h-8 border-[1px] border-solid" style="color: rgba(0, 229, 255, 1); border-color: rgba(0, 229, 255, 1);">
+<iconify-icon id="17:127" orderindex="80" icon="lucide:eye" class="text-sm"></iconify-icon>
+</button>
+<button id="17:128" orderindex="81" class="hover:bg-[#FFC107]/10 flex justify-center items-center w-8 h-8 border-[1px] border-solid" style="color: rgba(255, 193, 7, 1); border-color: rgba(255, 193, 7, 1);">
+<iconify-icon id="17:129" orderindex="80" icon="lucide:pause" class="text-sm"></iconify-icon>
+</button>
+<button id="17:130" orderindex="82" class="hover:bg-[#F44336]/10 flex justify-center items-center w-8 h-8 border-[1px] border-solid" style="color: rgba(244, 67, 54, 1); border-color: rgba(244, 67, 54, 1);">
+<iconify-icon id="17:131" orderindex="80" icon="lucide:square" class="text-sm"></iconify-icon>
+</button>
+</div>
+</div>
+
+<div id="17:132" orderindex="81" style="border-color: color-mix( in oklab , #00E5FF 50% , transparent );" class="flex justify-between items-center p-4 border-[1px] border-solid">
+<div id="17:133" orderindex="80" style="flex-basis: 0%;" class="flex flex-col grow shrink gap-y-1 gap-x-1">
+<div id="17:134" orderindex="80" class="flex items-center gap-y-3 gap-x-3">
+<span id="17:135" orderindex="80" style="color: color-mix( in oklab , #fff 95% , transparent );" class="font-semibold">多模态内容生成</span>
+<div id="17:136" orderindex="81" style="background-color: rgba(255, 193, 7, 1); color: color-mix( in oklab , #000 90% , transparent ); padding: 0.25rem 0.5rem;" class="text-xs font-semibold">暂停</div>
+</div>
+<span id="17:137" orderindex="81" style="color: color-mix( in oklab , #fff 70% , transparent );" class="text-sm">执行ID: EXEC-2024-002</span>
+<span id="17:138" orderindex="82" style="color: color-mix( in oklab , #fff 50% , transparent );" class="text-sm">当前节点: 图像生成 (等待)</span>
+<span id="17:139" orderindex="83" style="color: color-mix( in oklab , #fff 50% , transparent );" class="text-xs">开始时间: 13:45:32</span>
+</div>
+<div id="17:140" orderindex="81" class="flex items-center gap-y-2 gap-x-2">
+<button id="17:141" orderindex="80" class="hover:bg-[#00E5FF]/10 flex justify-center items-center w-8 h-8 border-[1px] border-solid" style="color: rgba(0, 229, 255, 1); border-color: rgba(0, 229, 255, 1);">
+<iconify-icon id="17:142" orderindex="80" icon="lucide:eye" class="text-sm"></iconify-icon>
+</button>
+<button id="17:143" orderindex="81" class="hover:bg-[#4CAF50]/10 flex justify-center items-center w-8 h-8 border-[1px] border-solid" style="color: rgba(76, 175, 80, 1); border-color: rgba(76, 175, 80, 1);">
+<iconify-icon id="17:144" orderindex="80" icon="lucide:play" class="text-sm"></iconify-icon>
+</button>
+<button id="17:145" orderindex="82" class="hover:bg-[#F44336]/10 flex justify-center items-center w-8 h-8 border-[1px] border-solid" style="color: rgba(244, 67, 54, 1); border-color: rgba(244, 67, 54, 1);">
+<iconify-icon id="17:146" orderindex="80" icon="lucide:square" class="text-sm"></iconify-icon>
+</button>
+</div>
+</div>
+
+<div id="17:147" orderindex="82" style="border-color: color-mix( in oklab , #00E5FF 50% , transparent );" class="flex justify-between items-center p-4 border-[1px] border-solid">
+<div id="17:148" orderindex="80" style="flex-basis: 0%;" class="flex flex-col grow shrink gap-y-1 gap-x-1">
+<div id="17:149" orderindex="80" class="flex items-center gap-y-3 gap-x-3">
+<span id="17:150" orderindex="80" style="color: color-mix( in oklab , #fff 95% , transparent );" class="font-semibold">智能客服问答训练</span>
+<div id="17:151" orderindex="81" style="background-color: rgba(76, 175, 80, 1); color: rgba(255, 255, 255, 1); padding: 0.25rem 0.5rem;" class="text-xs font-semibold">运行中</div>
+</div>
+<span id="17:152" orderindex="81" style="color: color-mix( in oklab , #fff 70% , transparent );" class="text-sm">执行ID: EXEC-2024-003</span>
+<span id="17:153" orderindex="82" style="color: color-mix( in oklab , #fff 50% , transparent );" class="text-sm">当前节点: 模型训练 → 验证评估</span>
+<span id="17:154" orderindex="83" style="color: color-mix( in oklab , #fff 50% , transparent );" class="text-xs">开始时间: 12:18:47</span>
+</div>
+<div id="17:155" orderindex="81" class="flex items-center gap-y-2 gap-x-2">
+<button id="17:156" orderindex="80" class="hover:bg-[#00E5FF]/10 flex justify-center items-center w-8 h-8 border-[1px] border-solid" style="color: rgba(0, 229, 255, 1); border-color: rgba(0, 229, 255, 1);">
+<iconify-icon id="17:157" orderindex="80" icon="lucide:eye" class="text-sm"></iconify-icon>
+</button>
+<button id="17:158" orderindex="81" class="hover:bg-[#FFC107]/10 flex justify-center items-center w-8 h-8 border-[1px] border-solid" style="color: rgba(255, 193, 7, 1); border-color: rgba(255, 193, 7, 1);">
+<iconify-icon id="17:159" orderindex="80" icon="lucide:pause" class="text-sm"></iconify-icon>
+</button>
+<button id="17:160" orderindex="82" class="hover:bg-[#F44336]/10 flex justify-center items-center w-8 h-8 border-[1px] border-solid" style="color: rgba(244, 67, 54, 1); border-color: rgba(244, 67, 54, 1);">
+<iconify-icon id="17:161" orderindex="80" icon="lucide:square" class="text-sm"></iconify-icon>
+</button>
+</div>
+</div>
+</div>
+</section>
+
+<section id="17:162" orderindex="81" class="grid grid-cols-2 gap-y-6 gap-x-6">
+
+<div id="17:163" orderindex="80" style="background-color: rgba(0, 0, 0, 1); border-color: rgba(0, 229, 255, 1);" class="flex flex-col gap-y-4 gap-x-4 p-6 border-[1px] border-solid">
+<h3 id="17:164" orderindex="80" style="color: color-mix( in oklab , #fff 95% , transparent );" class="text-lg font-semibold">24小时执行成功率</h3>
+<img id="17:165" orderindex="81" class="slot w-[300px] h-[200px] max-w-full" alt="description: {
+                  &quot;grid&quot;: { &quot;top&quot;: 12, &quot;right&quot;: 12, &quot;bottom&quot;: 12, &quot;left&quot;: 12, &quot;containLabel&quot;: true },
+                  &quot;xAxis&quot;: {
+                    &quot;type&quot;: &quot;category&quot;,
+                    &quot;data&quot;: [&quot;00:00&quot;, &quot;04:00&quot;, &quot;08:00&quot;, &quot;12:00&quot;, &quot;16:00&quot;, &quot;20:00&quot;, &quot;24:00&quot;],
+                    &quot;axisLine&quot;: { &quot;lineStyle&quot;: { &quot;color&quot;: &quot;#00E5FF&quot; } },
+                    &quot;axisLabel&quot;: { &quot;color&quot;: &quot;#ffffff70&quot; }
+                  },
+                  &quot;yAxis&quot;: {
+                    &quot;type&quot;: &quot;value&quot;,
+                    &quot;min&quot;: 85,
+                    &quot;max&quot;: 100,
+                    &quot;axisLine&quot;: { &quot;lineStyle&quot;: { &quot;color&quot;: &quot;#00E5FF&quot; } },
+                    &quot;axisLabel&quot;: { &quot;color&quot;: &quot;#ffffff70&quot; },
+                    &quot;splitLine&quot;: { &quot;lineStyle&quot;: { &quot;color&quot;: &quot;#00E5FF30&quot; } }
+                  },
+                  &quot;series&quot;: [{
+                    &quot;data&quot;: [92, 89, 95, 97, 94, 91, 96],
+                    &quot;type&quot;: &quot;line&quot;,
+                    &quot;smooth&quot;: true,
+                    &quot;lineStyle&quot;: { &quot;color&quot;: &quot;#C6FF00&quot;, &quot;width&quot;: 2 },
+                    &quot;itemStyle&quot;: { &quot;color&quot;: &quot;#C6FF00&quot; },
+                    &quot;areaStyle&quot;: {
+                      &quot;color&quot;: {
+                        &quot;type&quot;: &quot;linear&quot;,
+                        &quot;x&quot;: 0, &quot;y&quot;: 0, &quot;x2&quot;: 0, &quot;y2&quot;: 1,
+                        &quot;colorStops&quot;: [
+                          { &quot;offset&quot;: 0, &quot;color&quot;: &quot;#C6FF0030&quot; },
+                          { &quot;offset&quot;: 1, &quot;color&quot;: &quot;#C6FF0005&quot; }
+                        ]
+                      }
+                    }
+                  }]
+                }, width: 300px, height: 200px" src="assets/img/8fa91171-fb7c-4e65-8416-9d7edae87036.svg" placeholder="https://via.placeholder.com/300x200" width="300px" height="200px">
+</div>
+
+<div id="17:166" orderindex="81" style="background-color: rgba(0, 0, 0, 1); border-color: rgba(0, 229, 255, 1);" class="flex flex-col gap-y-4 gap-x-4 p-6 border-[1px] border-solid">
+<h3 id="17:167" orderindex="80" style="color: color-mix( in oklab , #fff 95% , transparent );" class="text-lg font-semibold">平均执行时长趋势</h3>
+<img id="17:168" orderindex="81" class="slot w-[300px] h-[200px] max-w-full" alt="description: {
+                  &quot;grid&quot;: { &quot;top&quot;: 12, &quot;right&quot;: 12, &quot;bottom&quot;: 12, &quot;left&quot;: 12, &quot;containLabel&quot;: true },
+                  &quot;xAxis&quot;: {
+                    &quot;type&quot;: &quot;category&quot;,
+                    &quot;data&quot;: [&quot;00:00&quot;, &quot;04:00&quot;, &quot;08:00&quot;, &quot;12:00&quot;, &quot;16:00&quot;, &quot;20:00&quot;, &quot;24:00&quot;],
+                    &quot;axisLine&quot;: { &quot;lineStyle&quot;: { &quot;color&quot;: &quot;#00E5FF&quot; } },
+                    &quot;axisLabel&quot;: { &quot;color&quot;: &quot;#ffffff70&quot; }
+                  },
+                  &quot;yAxis&quot;: {
+                    &quot;type&quot;: &quot;value&quot;,
+                    &quot;axisLine&quot;: { &quot;lineStyle&quot;: { &quot;color&quot;: &quot;#00E5FF&quot; } },
+                    &quot;axisLabel&quot;: { &quot;color&quot;: &quot;#ffffff70&quot; },
+                    &quot;splitLine&quot;: { &quot;lineStyle&quot;: { &quot;color&quot;: &quot;#00E5FF30&quot; } }
+                  },
+                  &quot;series&quot;: [{
+                    &quot;data&quot;: [2.1, 2.4, 1.8, 2.6, 3.1, 2.9, 2.3],
+                    &quot;type&quot;: &quot;bar&quot;,
+                    &quot;itemStyle&quot;: { &quot;color&quot;: &quot;#9FCC00&quot;, &quot;borderRadius&quot;: [4, 4, 0, 0] }
+                  }]
+                }, width: 300px, height: 200px" src="assets/img/8db5575a-96ef-449a-95ab-68218c4ebda7.svg" placeholder="https://via.placeholder.com/300x200" width="300px" height="200px">
+</div>
+
+<div id="17:169" orderindex="82" style="background-color: rgba(0, 0, 0, 1); border-color: rgba(0, 229, 255, 1);" class="flex flex-col gap-y-4 gap-x-4 p-6 border-[1px] border-solid">
+<h3 id="17:170" orderindex="80" style="color: color-mix( in oklab , #fff 95% , transparent );" class="text-lg font-semibold">资源使用率</h3>
+<img id="17:171" orderindex="81" class="slot w-[300px] h-[200px] max-w-full" alt="description: {
+                  &quot;grid&quot;: { &quot;top&quot;: 12, &quot;right&quot;: 12, &quot;bottom&quot;: 12, &quot;left&quot;: 12, &quot;containLabel&quot;: true },
+                  &quot;series&quot;: [{
+                    &quot;name&quot;: &quot;资源使用&quot;,
+                    &quot;type&quot;: &quot;pie&quot;,
+                    &quot;radius&quot;: [&quot;40%&quot;, &quot;70%&quot;],
+                    &quot;center&quot;: [&quot;50%&quot;, &quot;50%&quot;],
+                    &quot;data&quot;: [
+                      { &quot;value&quot;: 45, &quot;name&quot;: &quot;CPU&quot;, &quot;itemStyle&quot;: { &quot;color&quot;: &quot;#C6FF00&quot; } },
+                      { &quot;value&quot;: 32, &quot;name&quot;: &quot;内存&quot;, &quot;itemStyle&quot;: { &quot;color&quot;: &quot;#9FCC00&quot; } },
+                      { &quot;value&quot;: 23, &quot;name&quot;: &quot;API调用&quot;, &quot;itemStyle&quot;: { &quot;color&quot;: &quot;#7DA300&quot; } }
+                    ],
+                    &quot;itemStyle&quot;: { &quot;borderRadius&quot;: 0, &quot;borderColor&quot;: &quot;#000&quot;, &quot;borderWidth&quot;: 2 },
+                    &quot;label&quot;: { &quot;show&quot;: true, &quot;color&quot;: &quot;#ffffff95&quot; }
+                  }]
+                }, width: 300px, height: 200px" src="assets/img/8fbef2eb-4755-4f18-b121-60718620c3a3.svg" placeholder="https://via.placeholder.com/300x200" width="300px" height="200px">
+</div>
+
+<div id="17:172" orderindex="83" style="background-color: rgba(0, 0, 0, 1); border-color: rgba(0, 229, 255, 1);" class="flex flex-col gap-y-4 gap-x-4 p-6 border-[1px] border-solid">
+<h3 id="17:173" orderindex="80" style="color: color-mix( in oklab , #fff 95% , transparent );" class="text-lg font-semibold">错误率统计</h3>
+<img id="17:174" orderindex="81" class="slot w-[300px] h-[200px] max-w-full" alt="description: {
+                  &quot;grid&quot;: { &quot;top&quot;: 12, &quot;right&quot;: 12, &quot;bottom&quot;: 12, &quot;left&quot;: 12, &quot;containLabel&quot;: true },
+                  &quot;xAxis&quot;: {
+                    &quot;type&quot;: &quot;category&quot;,
+                    &quot;data&quot;: [&quot;网络&quot;, &quot;超时&quot;, &quot;认证&quot;, &quot;数据&quot;, &quot;系统&quot;],
+                    &quot;axisLine&quot;: { &quot;lineStyle&quot;: { &quot;color&quot;: &quot;#00E5FF&quot; } },
+                    &quot;axisLabel&quot;: { &quot;color&quot;: &quot;#ffffff70&quot; }
+                  },
+                  &quot;yAxis&quot;: {
+                    &quot;type&quot;: &quot;value&quot;,
+                    &quot;axisLine&quot;: { &quot;lineStyle&quot;: { &quot;color&quot;: &quot;#00E5FF&quot; } },
+                    &quot;axisLabel&quot;: { &quot;color&quot;: &quot;#ffffff70&quot; },
+                    &quot;splitLine&quot;: { &quot;lineStyle&quot;: { &quot;color&quot;: &quot;#00E5FF30&quot; } }
+                  },
+                  &quot;series&quot;: [{
+                    &quot;data&quot;: [12, 8, 5, 15, 3],
+                    &quot;type&quot;: &quot;bar&quot;,
+                    &quot;itemStyle&quot;: { &quot;color&quot;: &quot;#FF6D00&quot;, &quot;borderRadius&quot;: [4, 4, 0, 0] }
+                  }]
+                }, width: 300px, height: 200px" src="assets/img/938f7ffe-3b06-462a-a418-31894dc5bc16.svg" placeholder="https://via.placeholder.com/300x200" width="300px" height="200px">
+</div>
+</section>
+</div>
+
+<div id="17:175" orderindex="81" style="grid-column-start: span 1; grid-column-end: span 1;" class="flex flex-col gap-y-8 gap-x-8">
+
+<section id="17:176" orderindex="80" style="background-color: rgba(0, 0, 0, 1); border-color: rgba(0, 229, 255, 1);" class="flex flex-col gap-y-4 gap-x-4 p-6 border-[1px] border-solid">
+<div id="17:177" orderindex="80" class="flex justify-between items-center">
+<h2 id="17:178" orderindex="80" style="color: color-mix( in oklab , #fff 95% , transparent );" class="text-xl font-semibold">告警与异常</h2>
+<button id="17:179" orderindex="81" class="hover:text-[#DEFF66] flex items-center" style="color: rgba(198, 255, 0, 1);">
+<span id="17:180" orderindex="80">查看全部</span>
+</button>
+</div>
+<div id="17:181" orderindex="81" class="flex flex-col gap-y-3 gap-x-3">
+
+<div id="17:182" orderindex="80" style="border-color: rgba(0, 229, 255, 1);" class="flex flex-col gap-y-2 gap-x-2 p-4 border-[1px] border-solid">
+<div id="17:183" orderindex="80" class="flex justify-between items-center">
+<div id="17:184" orderindex="80" style="background-color: rgba(244, 67, 54, 1); color: rgba(255, 255, 255, 1); padding: 0.25rem 0.5rem;" class="text-xs font-semibold">高级</div>
+<span id="17:185" orderindex="81" style="color: color-mix( in oklab , #fff 50% , transparent );" class="text-xs">2分钟前</span>
+</div>
+<span id="17:186" orderindex="81" style="color: color-mix( in oklab , #fff 95% , transparent );" class="font-semibold">API调用异常</span>
+<span id="17:187" orderindex="82" style="color: color-mix( in oklab , #fff 70% , transparent );" class="text-sm">OpenAI GPT-4接口连续5次调用失败</span>
+<button id="17:188" orderindex="83" class="hover:text-[#DEFF66] text-sm text-left" style="color: rgba(198, 255, 0, 1);">
+                  查看详情 →
+                </button>
+</div>
+
+<div id="17:189" orderindex="81" style="border-color: rgba(0, 229, 255, 1);" class="flex flex-col gap-y-2 gap-x-2 p-4 border-[1px] border-solid">
+<div id="17:190" orderindex="80" class="flex justify-between items-center">
+<div id="17:191" orderindex="80" style="background-color: rgba(255, 193, 7, 1); color: color-mix( in oklab , #000 90% , transparent ); padding: 0.25rem 0.5rem;" class="text-xs font-semibold">中级</div>
+<span id="17:192" orderindex="81" style="color: color-mix( in oklab , #fff 50% , transparent );" class="text-xs">8分钟前</span>
+</div>
+<span id="17:193" orderindex="81" style="color: color-mix( in oklab , #fff 95% , transparent );" class="font-semibold">内存使用率过高</span>
+<span id="17:194" orderindex="82" style="color: color-mix( in oklab , #fff 70% , transparent );" class="text-sm">执行节点内存使用率超过85%阈值</span>
+<button id="17:195" orderindex="83" class="hover:text-[#DEFF66] text-sm text-left" style="color: rgba(198, 255, 0, 1);">
+                  查看详情 →
+                </button>
+</div>
+
+<div id="17:196" orderindex="82" style="border-color: rgba(0, 229, 255, 1);" class="flex flex-col gap-y-2 gap-x-2 p-4 border-[1px] border-solid">
+<div id="17:197" orderindex="80" class="flex justify-between items-center">
+<div id="17:198" orderindex="80" style="background-color: rgba(33, 150, 243, 1); color: rgba(255, 255, 255, 1); padding: 0.25rem 0.5rem;" class="text-xs font-semibold">信息</div>
+<span id="17:199" orderindex="81" style="color: color-mix( in oklab , #fff 50% , transparent );" class="text-xs">15分钟前</span>
+</div>
+<span id="17:200" orderindex="81" style="color: color-mix( in oklab , #fff 95% , transparent );" class="font-semibold">定时任务完成</span>
+<span id="17:201" orderindex="82" style="color: color-mix( in oklab , #fff 70% , transparent );" class="text-sm">数据同步任务成功执行</span>
+<button id="17:202" orderindex="83" class="hover:text-[#DEFF66] text-sm text-left" style="color: rgba(198, 255, 0, 1);">
+                  查看详情 →
+                </button>
+</div>
+</div>
+</section>
+
+<section id="17:203" orderindex="81" style="background-color: rgba(0, 0, 0, 1); border-color: rgba(0, 229, 255, 1);" class="flex flex-col gap-y-4 gap-x-4 p-6 border-[1px] border-solid">
+<h2 id="17:204" orderindex="80" style="color: color-mix( in oklab , #fff 95% , transparent );" class="text-xl font-semibold">快速访问</h2>
+
+<div id="17:205" orderindex="81" class="flex flex-col gap-y-3 gap-x-3">
+<h3 id="17:206" orderindex="80" style="color: color-mix( in oklab , #fff 70% , transparent );" class="text-lg font-semibold">最近编辑的编排</h3>
+<div id="17:207" orderindex="81" class="<div class= p-4 border-[1px] border-solid" style="border-color: color-mix( in oklab , #00E5FF 50% , transparent );">
+<span id="17:208" orderindex="80" style="color: color-mix( in oklab , #fff 95% , transparent );" class="font-semibold">客户服务自动化</span>
+<span id="17:209" orderindex="81" style="color: color-mix( in oklab , #fff 50% , transparent );" class="text-sm">最后修改：2小时前</span>
+<button id="17:210" orderindex="82" class="hover:text-[#DEFF66] text-sm flex items-center gap-y-2 gap-x-2" style="color: rgba(198, 255, 0, 1);">
+<iconify-icon id="17:211" orderindex="80" icon="lucide:edit-3" class="text-sm"></iconify-icon>
+<span id="17:212" orderindex="81">快速编辑</span>
+</button>
+</div>
+<div id="17:213" orderindex="82" style="border-color: color-mix( in oklab , #00E5FF 50% , transparent );" class="flex flex-col gap-y-2 gap-x-2 p-4 border-[1px] border-solid">
+<span id="17:214" orderindex="80" style="color: color-mix( in oklab , #fff 95% , transparent );" class="font-semibold">数据分析流水线</span>
+<span id="17:215" orderindex="81" style="color: color-mix( in oklab , #fff 50% , transparent );" class="text-sm">最后修改：5小时前</span>
+<button id="17:216" orderindex="82" class="hover:text-[#DEFF66] text-sm flex items-center gap-y-2 gap-x-2" style="color: rgba(198, 255, 0, 1);">
+<iconify-icon id="17:217" orderindex="80" icon="lucide:edit-3" class="text-sm"></iconify-icon>
+<span id="17:218" orderindex="81">快速编辑</span>
+</button>
+</div>
+</div>
+
+<div id="17:219" orderindex="82" class="flex flex-col gap-y-3 gap-x-3">
+<h3 id="17:220" orderindex="80" style="color: color-mix( in oklab , #fff 70% , transparent );" class="text-lg font-semibold">常用Agent角色</h3>
+<div id="17:221" orderindex="81" style="border-color: color-mix( in oklab , #00E5FF 50% , transparent );" class="flex flex-col gap-y-2 gap-x-2 p-4 border-[1px] border-solid">
+<span id="17:222" orderindex="80" style="color: color-mix( in oklab , #fff 95% , transparent );" class="font-semibold">数据分析师</span>
+<span id="17:223" orderindex="81" style="color: color-mix( in oklab , #fff 50% , transparent );" class="text-sm">使用频率：24次/天</span>
+<button id="17:224" orderindex="82" class="hover:text-[#DEFF66] text-sm flex items-center gap-y-2 gap-x-2" style="color: rgba(198, 255, 0, 1);">
+<iconify-icon id="17:225" orderindex="80" icon="lucide:settings" class="text-sm"></iconify-icon>
+<span id="17:226" orderindex="81">快速配置</span>
+</button>
+</div>
+<div id="17:227" orderindex="82" style="border-color: color-mix( in oklab , #00E5FF 50% , transparent );" class="flex flex-col gap-y-2 gap-x-2 p-4 border-[1px] border-solid">
+<span id="17:228" orderindex="80" style="color: color-mix( in oklab , #fff 95% , transparent );" class="font-semibold">内容生成器</span>
+<span id="17:229" orderindex="81" style="color: color-mix( in oklab , #fff 50% , transparent );" class="text-sm">使用频率：18次/天</span>
+<button id="17:230" orderindex="82" class="hover:text-[#DEFF66] text-sm flex items-center gap-y-2 gap-x-2" style="color: rgba(198, 255, 0, 1);">
+<iconify-icon id="17:231" orderindex="80" icon="lucide:settings" class="text-sm"></iconify-icon>
+<span id="17:232" orderindex="81">快速配置</span>
+</button>
+</div>
+</div>
+
+<div id="17:233" orderindex="83" class="flex flex-col gap-y-3 gap-x-3">
+<h3 id="17:234" orderindex="80" style="color: color-mix( in oklab , #fff 70% , transparent );" class="text-lg font-semibold">即将执行的任务</h3>
+<div id="17:235" orderindex="81" style="border-color: color-mix( in oklab , #00E5FF 50% , transparent );" class="flex flex-col gap-y-2 gap-x-2 p-4 border-[1px] border-solid">
+<span id="17:236" orderindex="80" style="color: color-mix( in oklab , #fff 95% , transparent );" class="font-semibold">日报生成</span>
+<span id="17:237" orderindex="81" style="color: color-mix( in oklab , #fff 50% , transparent );" class="text-sm">下次执行：今晚 23:00</span>
+<button id="17:238" orderindex="82" class="hover:text-[#DEFF66] text-sm flex items-center gap-y-2 gap-x-2" style="color: rgba(198, 255, 0, 1);">
+<iconify-icon id="17:239" orderindex="80" icon="lucide:edit" class="text-sm"></iconify-icon>
+<span id="17:240" orderindex="81">编辑任务</span>
+</button>
+</div>
+<div id="17:241" orderindex="82" style="border-color: color-mix( in oklab , #00E5FF 50% , transparent );" class="flex flex-col gap-y-2 gap-x-2 p-4 border-[1px] border-solid">
+<span id="17:242" orderindex="80" style="color: color-mix( in oklab , #fff 95% , transparent );" class="font-semibold">数据备份</span>
+<span id="17:243" orderindex="81" style="color: color-mix( in oklab , #fff 50% , transparent );" class="text-sm">下次执行：明天 02:00</span>
+<button id="17:244" orderindex="82" class="hover:text-[#DEFF66] text-sm flex items-center gap-y-2 gap-x-2" style="color: rgba(198, 255, 0, 1);">
+<iconify-icon id="17:245" orderindex="80" icon="lucide:edit" class="text-sm"></iconify-icon>
+<span id="17:246" orderindex="81">编辑任务</span>
+</button>
+</div>
+</div>
+</section>
+</div>
+</div>
+</main>
+</div>
+
+
+</body></html>
