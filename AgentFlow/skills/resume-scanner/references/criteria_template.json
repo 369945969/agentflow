@@ -1,0 +1,17 @@
+{
+  "keywords": [
+    "Python",
+    "JavaScript",
+    "React",
+    "Node.js",
+    "Machine Learning",
+    "SQL",
+    "AWS",
+    "Docker"
+  ],
+  "education": ["Bachelor", "Master", "PhD", "Computer Science", "Engineering"],
+  "experience_years": 2,
+  "industries": ["Technology", "Software", "Finance", "Healthcare"],
+  "required_keywords": ["Python", "React"],
+  "preferred_keywords": ["AWS", "Docker"]
+}

@@ -1,21 +1,31 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import BaseLayout from '../components/BaseLayout.vue'
 
-const activeTab = ref('全部')
 const isDrawerOpen = ref(false)
 const isInstallDrawerOpen = ref(false)
 const installUrl = ref('')
 const isInstalling = ref(false)
 
-const skills = ref([
-  { id: 1, name: 'Google Search', type: 'HTTP API', desc: '集成 Google 搜索引擎，允许 Agent 获取最新的网页、新闻和学术内容。', version: 'v2.1.0', icon: 'lucide:search', color: '#3B9BFF' },
-  { id: 2, name: 'Python Runner', type: 'Script', desc: '安全的沙箱环境，支持执行 Python 脚本进行数据处理、绘图或数学运算。', version: 'v1.4.2', icon: 'lucide:code-2', color: '#50C878' },
-  { id: 3, name: 'MySQL Connector', type: 'Database', desc: '标准数据库连接器，支持执行 SQL 查询、更新和结构化数据导出。', version: 'v3.0.1', icon: 'lucide:database', color: '#FFB846' },
-  { id: 4, name: 'Email Dispatcher', type: 'Plugin', desc: '自动化邮件发送工具，支持 SMTP 配置及多模板 HTML 邮件推送。', version: 'v1.0.5', icon: 'lucide:mail', color: '#A78BFA' },
-  { id: 5, name: 'PDF Parser', type: 'Script', desc: '高性能文档解析引擎，能够识别 PDF 中的文本、表格并提取结构化信息。', version: 'v2.2.0', icon: 'lucide:file-text', color: '#F472B6' },
-  { id: 6, name: 'Weather API', type: 'HTTP API', desc: '调用全球实时天气数据，包括温度、湿度、风速及未来 7 天预报。', version: 'v1.2.0', icon: 'lucide:cloud-sun', color: '#60A5FA' }
-])
+const skills = ref<any[]>([])
+
+const fetchSkills = async () => {
+  try {
+    const response = await fetch('http://localhost:3000/api/skills/')
+    const data = await response.json()
+    skills.value = data.map((s: any) => ({
+      ...s,
+      desc: s.description || '',
+      color: s.color || '#3B9BFF'
+    }))
+  } catch (error) {
+    console.error('Failed to fetch skills:', error)
+  }
+}
+
+onMounted(() => {
+  fetchSkills()
+})
 
 const openCreateDrawer = () => isDrawerOpen.value = true
 const openInstallDrawer = () => isInstallDrawerOpen.value = true
@@ -27,22 +37,70 @@ const closeDrawers = () => {
   isInstalling.value = false
 }
 
-const handleInstall = () => {
+const handleInstall = async () => {
   if (!installUrl.value) return
   isInstalling.value = true
-  // Simulate API fetch and installation
-  setTimeout(() => {
-    skills.value.unshift({
-      id: Date.now(),
-      name: 'New Linked Skill',
-      type: 'HTTP API',
-      desc: `从远程地址 ${installUrl.value} 成功识别并安装的技能。`,
-      version: 'v1.0.0',
-      icon: 'lucide:link',
-      color: '#3B9BFF'
+  try {
+    const response = await fetch('http://localhost:3000/api/skills/install', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: installUrl.value })
     })
-    closeDrawers()
-  }, 2000)
+    if (response.ok) {
+      await fetchSkills()
+      closeDrawers()
+    }
+  } catch (error) {
+    console.error('Installation failed:', error)
+  } finally {
+    isInstalling.value = false
+  }
+}
+
+const isDeleteModalOpen = ref(false)
+const skillToDelete = ref<any>(null)
+
+const confirmDelete = (skill: any) => {
+  skillToDelete.value = skill
+  isDeleteModalOpen.value = true
+}
+
+const closeDeleteModal = () => {
+  isDeleteModalOpen.value = false
+  skillToDelete.value = null
+}
+
+const executeDelete = async () => {
+  if (!skillToDelete.value) return
+  try {
+    const response = await fetch(`http://localhost:3000/api/skills/${skillToDelete.value.id}`, {
+      method: 'DELETE'
+    })
+    if (response.ok) {
+      skills.value = skills.value.filter(s => s.id !== skillToDelete.value.id)
+      closeDeleteModal()
+    }
+  } catch (error) {
+    console.error('Failed to delete skill:', error)
+  }
+}
+
+const handleStart = (skill: any) => {
+  console.log('🚀 Starting skill:', skill.name);
+  alert(`正在启动技能: ${skill.name}`);
+}
+
+const isDetailModalOpen = ref(false)
+const selectedSkillForDetail = ref<any>(null)
+
+const showDetail = (skill: any) => {
+  selectedSkillForDetail.value = skill
+  isDetailModalOpen.value = true
+}
+
+const closeDetailModal = () => {
+  isDetailModalOpen.value = false
+  selectedSkillForDetail.value = null
 }
 </script>
 
@@ -63,7 +121,7 @@ const handleInstall = () => {
             class="bg-white/5 hover:bg-white/10 text-white/80 px-5 py-2.5 rounded-xl flex items-center gap-2 border border-white/10 transition-all active:scale-95"
           >
             <iconify-icon icon="lucide:plus" class="text-lg"></iconify-icon>
-            <span class="text-sm font-semibold">新增新技能</span>
+            <span class="text-sm font-semibold">开发新技能</span>
           </button>
           <!-- Install Button -->
           <button 
@@ -76,20 +134,6 @@ const handleInstall = () => {
         </div>
       </div>
 
-      <!-- Filter Bar -->
-      <div class="flex items-center justify-between bg-white/5 border border-white/10 p-1.5 rounded-2xl backdrop-blur-md">
-        <div class="flex gap-1">
-          <button v-for="t in ['全部', 'HTTP API', 'Script', 'Database', 'Plugin']" :key="t" 
-            @click="activeTab = t"
-            :class="['px-4 py-1.5 rounded-xl text-xs transition-all font-medium', activeTab === t ? 'bg-[#3B9BFF]/20 text-[#3B9BFF] border border-[#3B9BFF]/30' : 'text-white/40 hover:text-white/60']"
-          >{{ t }}</button>
-        </div>
-        <div class="flex items-center gap-3 px-3 py-1.5 bg-white/5 border border-white/10 rounded-xl mr-1">
-          <iconify-icon icon="lucide:search" class="text-white/30 text-sm"></iconify-icon>
-          <input type="text" placeholder="搜索技能库..." class="bg-transparent border-none outline-none text-xs text-white/70 w-48">
-        </div>
-      </div>
-
       <!-- Skills Grid -->
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         <div v-for="skill in skills" :key="skill.id" 
@@ -98,8 +142,8 @@ const handleInstall = () => {
           <div class="absolute -right-12 -top-12 w-24 h-24 blur-[60px] opacity-10 group-hover:opacity-25 transition-opacity" :style="{backgroundColor: skill.color}"></div>
           <div class="flex justify-between items-start relative z-10">
             <div class="flex gap-4">
-              <div class="w-12 h-12 rounded-xl flex items-center justify-center text-2xl shadow-inner shrink-0" :style="{backgroundColor: skill.color+'15', color: skill.color}">
-                <iconify-icon :icon="skill.icon"></iconify-icon>
+              <div class="w-12 h-12 rounded-xl flex items-center justify-center text-2xl shadow-inner shrink-0" :style="{backgroundColor: (skill.color || '#3B9BFF')+'15', color: skill.color || '#3B9BFF'}">
+                <iconify-icon :icon="skill.icon || 'lucide:terminal'"></iconify-icon>
               </div>
               <div class="min-w-0">
                 <h3 class="text-base font-bold text-white/90 truncate">{{ skill.name }}</h3>
@@ -109,19 +153,16 @@ const handleInstall = () => {
               </div>
             </div>
             <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-all transform translate-x-2 group-hover:translate-x-0">
-              <button class="w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-white/40 hover:text-[#3B9BFF] hover:bg-[#3B9BFF]/10 transition-all"><iconify-icon icon="lucide:edit-3" class="text-sm"></iconify-icon></button>
-              <button class="w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-white/40 hover:text-red-400 hover:bg-red-500/10 transition-all"><iconify-icon icon="lucide:trash-2" class="text-sm"></iconify-icon></button>
+              <button @click.stop="handleStart(skill)" class="w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-white/40 hover:text-[#50C878] hover:bg-[#50C878]/10 transition-all" title="启动技能"><iconify-icon icon="lucide:play" class="text-sm ml-0.5"></iconify-icon></button>
+              <button @click.stop="confirmDelete(skill)" class="w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-white/40 hover:text-red-400 hover:bg-red-500/10 transition-all"><iconify-icon icon="lucide:trash-2" class="text-sm"></iconify-icon></button>
             </div>
           </div>
           <p class="text-sm text-white/50 leading-relaxed line-clamp-3 h-15">{{ skill.desc }}</p>
+          <button @click.stop="showDetail(skill)" class="text-[10px] text-[#3B9BFF] hover:text-[#5FB4FF] transition-colors flex items-center gap-1 w-fit mt-[-10px]"><iconify-icon icon="lucide:info" class="text-xs"></iconify-icon>查看详情</button>
           <div class="flex items-center justify-between pt-4 border-t border-white/5">
             <div class="flex items-center gap-2">
-              <span class="text-[10px] text-white/20 uppercase font-bold tracking-widest">Version</span>
+              <span class="text-[10px] text-white/20 uppercase font-bold tracking-widest">Path</span>
               <span class="text-[10px] text-white/50 font-mono">{{ skill.version }}</span>
-            </div>
-            <div class="flex items-center gap-1 px-2 py-0.5 rounded bg-[#50C878]/10 border border-[#50C878]/20">
-              <div class="w-1 h-1 rounded-full bg-[#50C878]"></div>
-              <span class="text-[9px] text-[#50C878] font-bold uppercase">Ready</span>
             </div>
           </div>
         </div>
@@ -134,7 +175,7 @@ const handleInstall = () => {
       >
         <aside v-if="isDrawerOpen" class="fixed top-0 right-0 w-[560px] h-full z-[100] bg-[#1A2536]/98 backdrop-blur-3xl border-l border-[#3B9BFF]/30 shadow-[-20px_0_50px_rgba(0,0,0,0.5)] flex flex-col">
           <div class="p-6 border-b border-white/10 flex justify-between items-center">
-            <h2 class="text-xl font-bold text-white/95">新增新技能</h2>
+            <h2 class="text-xl font-bold text-white/95">开发新技能</h2>
             <button @click="closeDrawers" class="w-10 h-10 rounded-full flex items-center justify-center hover:bg-white/5 text-white/40"><iconify-icon icon="lucide:x" class="text-xl"></iconify-icon></button>
           </div>
           <div class="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar">
@@ -215,8 +256,80 @@ const handleInstall = () => {
           </div>
         </aside>
       </Transition>
+      
+      <!-- Drawer 4: Delete Confirmation Modal -->
+      <Transition 
+        enter-active-class="transition duration-300 ease-out" enter-from-class="opacity-0 scale-95" enter-to-class="opacity-100 scale-100"
+        leave-active-class="transition duration-200 ease-in" leave-from-class="opacity-100 scale-100" leave-to-class="opacity-0 scale-95"
+      >
+        <div v-if="isDeleteModalOpen" class="fixed inset-0 z-[120] flex items-center justify-center p-6">
+          <div @click="closeDeleteModal" class="absolute inset-0 bg-black/60 backdrop-blur-md"></div>
+          <div class="relative w-full max-w-md bg-[#1A2536] border border-red-500/20 rounded-3xl shadow-2xl overflow-hidden flex flex-col">
+            <div class="p-6 border-b border-white/10 flex justify-between items-center bg-red-500/5">
+              <div class="flex items-center gap-4">
+                <div class="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center text-xl text-red-500">
+                  <iconify-icon icon="lucide:alert-triangle"></iconify-icon>
+                </div>
+                <h2 class="text-xl font-bold text-white/95">确认删除技能</h2>
+              </div>
+              <button @click="closeDeleteModal" class="w-8 h-8 rounded-full flex items-center justify-center hover:bg-white/10 text-white/40"><iconify-icon icon="lucide:x" class="text-xl"></iconify-icon></button>
+            </div>
+            <div class="p-8 space-y-4">
+              <p class="text-sm text-white/70 leading-relaxed">
+                您确定要从技能库中移除 <span class="text-white font-bold">"{{ skillToDelete?.name }}"</span> 吗？此操作不可撤销。
+              </p>
+              <div class="bg-black/20 rounded-xl p-3 border border-white/5">
+                <p class="text-[10px] text-white/30 uppercase font-bold tracking-widest mb-1">物理路径</p>
+                <code class="text-[10px] text-white/40 break-all font-mono">{{ skillToDelete?.version }}</code>
+              </div>
+            </div>
+            <div class="p-6 border-t border-white/10 bg-white/5 flex gap-3">
+              <button @click="closeDeleteModal" class="flex-1 py-3 rounded-xl border border-white/10 text-sm text-white/60 hover:bg-white/5 transition-all">取消</button>
+              <button @click="executeDelete" class="flex-1 py-3 rounded-xl bg-red-500/80 hover:bg-red-500 text-white text-sm font-bold shadow-[0_0_20px_rgba(239,68,68,0.2)] transition-all">确认删除</button>
+            </div>
+          </div>
+        </div>
+      </Transition>
 
-      <div v-if="isDrawerOpen || isInstallDrawerOpen" @click="closeDrawers" class="fixed inset-0 bg-black/40 backdrop-blur-sm z-[90]"></div>
+
+      <!-- Drawer 3: Skill Details Modal -->
+      <Transition 
+        enter-active-class="transition duration-300 ease-out" enter-from-class="opacity-0 scale-95" enter-to-class="opacity-100 scale-100"
+        leave-active-class="transition duration-200 ease-in" leave-from-class="opacity-100 scale-100" leave-to-class="opacity-0 scale-95"
+      >
+        <div v-if="isDetailModalOpen" class="fixed inset-0 z-[110] flex items-center justify-center p-6">
+          <div @click="closeDetailModal" class="absolute inset-0 bg-black/60 backdrop-blur-md"></div>
+          <div class="relative w-full max-w-2xl bg-[#1A2536] border border-white/10 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+            <div class="p-6 border-b border-white/10 flex justify-between items-center bg-white/5">
+              <div class="flex items-center gap-4">
+                <div class="w-10 h-10 rounded-xl flex items-center justify-center text-xl" :style="{backgroundColor: selectedSkillForDetail?.color+'15', color: selectedSkillForDetail?.color}">
+                  <iconify-icon :icon="selectedSkillForDetail?.icon"></iconify-icon>
+                </div>
+                <h2 class="text-xl font-bold text-white/95">{{ selectedSkillForDetail?.name }}</h2>
+              </div>
+              <button @click="closeDetailModal" class="w-8 h-8 rounded-full flex items-center justify-center hover:bg-white/10 text-white/40"><iconify-icon icon="lucide:x" class="text-xl"></iconify-icon></button>
+            </div>
+            <div class="flex-1 overflow-y-auto p-8 custom-scrollbar space-y-6">
+              <div class="space-y-2">
+                <label class="text-[10px] text-white/40 font-bold uppercase tracking-widest">完整描述</label>
+                <p class="text-sm text-white/70 leading-relaxed whitespace-pre-wrap">{{ selectedSkillForDetail?.desc }}</p>
+              </div>
+              <div class="space-y-2 pt-4 border-t border-white/5">
+                <label class="text-[10px] text-white/40 font-bold uppercase tracking-widest">物理路径</label>
+                <div class="bg-black/20 rounded-xl p-4 border border-white/5">
+                  <code class="text-[11px] text-[#5FB4FF] break-all font-mono">{{ selectedSkillForDetail?.version }}</code>
+                </div>
+              </div>
+            </div>
+            <div class="p-4 border-t border-white/10 bg-white/5 flex justify-end">
+              <button @click="closeDetailModal" class="px-6 py-2 rounded-xl bg-white/5 border border-white/10 text-sm text-white/60 hover:bg-white/10 transition-all">关闭</button>
+            </div>
+          </div>
+        </div>
+      </Transition>
+
+
+      <div v-if="isDrawerOpen || isInstallDrawerOpen || isDetailModalOpen || isDeleteModalOpen" @click="closeDeleteModal(); closeDetailModal(); closeDrawers();" class="fixed inset-0 bg-black/40 backdrop-blur-sm z-[80]"></div>
     </main>
   </BaseLayout>
 </template>
