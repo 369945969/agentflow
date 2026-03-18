@@ -31,3 +31,15 @@ type Edge struct {
 	Metadata  string    `json:"metadata" db:"metadata"` // JSON as string in DuckDB
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 }
+
+type Model struct {
+	ID          string    `json:"id" db:"id"`
+	Name        string    `json:"name" db:"name"`
+	Provider    string    `json:"provider" db:"provider"`
+	BaseURL     string    `json:"base_url" db:"base_url"`
+	APIKey      string    `json:"api_key" db:"api_key"`
+	ModelName   string    `json:"model_name" db:"model_name"`
+	Description string    `json:"description" db:"description"`
+	CreatedAt   time.Time `json:"created_at" db:"created_at"`
+}
+

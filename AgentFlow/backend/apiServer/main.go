@@ -44,6 +44,7 @@ func main() {
 	// Register routes
 	routes.RegisterSkillRoutes(r)
 	routes.RegisterAgentRoutes(r)
+	routes.RegisterModelRoutes(r)
 
 	// Start server
 	port := config.AppConfig.Server.Port
