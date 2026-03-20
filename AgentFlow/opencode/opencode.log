@@ -1,0 +1,55 @@
+INFO  2026-03-20T15:10:59 +283ms service=default version=1.2.10 args=["serve","--port","3001","--log-level","INFO","--print-logs"] opencode
+Warning: OPENCODE_SERVER_PASSWORD is not set; server is unsecured.
+INFO  2026-03-20T15:10:59 +0ms service=config path=/Users/jack/.config/opencode/config.json loading
+INFO  2026-03-20T15:10:59 +1ms service=config path=/Users/jack/.config/opencode/opencode.json loading
+INFO  2026-03-20T15:10:59 +5ms service=config path=/Users/jack/.config/opencode/opencode.jsonc loading
+opencode server listening on http://127.0.0.1:3001
+INFO  2026-03-20T15:10:59 +481ms service=server method=GET path=/health request
+INFO  2026-03-20T15:10:59 +0ms service=server status=started method=GET path=/health request
+INFO  2026-03-20T15:10:59 +1ms service=default directory=/Users/jack/Desktop/agent/AgentFlow/opencode creating instance
+INFO  2026-03-20T15:10:59 +0ms service=project directory=/Users/jack/Desktop/agent/AgentFlow/opencode fromDirectory
+INFO  2026-03-20T15:10:59 +25ms service=db path=/Users/jack/.local/share/opencode/opencode.db opening database
+INFO  2026-03-20T15:10:59 +10ms service=db count=3 mode=bundled applying migrations
+INFO  2026-03-20T15:10:59 +4ms service=default directory=/Users/jack/Desktop/agent/AgentFlow/opencode bootstrapping
+INFO  2026-03-20T15:10:59 +2ms service=config path=/Users/jack/Desktop/agent/AgentFlow/opencode/opencode.json loading
+INFO  2026-03-20T15:10:59 +5ms service=config path=/Users/jack/.opencode/opencode.jsonc loading
+INFO  2026-03-20T15:10:59 +0ms service=config path=/Users/jack/.opencode/opencode.json loading
+INFO  2026-03-20T15:10:59 +3ms service=plugin name=CodexAuthPlugin loading internal plugin
+INFO  2026-03-20T15:10:59 +0ms service=plugin name=CopilotAuthPlugin loading internal plugin
+INFO  2026-03-20T15:10:59 +0ms service=plugin name=gitlabAuthPlugin loading internal plugin
+INFO  2026-03-20T15:10:59 +0ms service=plugin path=opencode-anthropic-auth@0.0.13 loading plugin
+INFO  2026-03-20T15:10:59 +9ms service=bus type=* subscribing
+INFO  2026-03-20T15:10:59 +0ms service=bus type=session.updated subscribing
+INFO  2026-03-20T15:10:59 +0ms service=bus type=message.updated subscribing
+INFO  2026-03-20T15:10:59 +0ms service=bus type=message.part.updated subscribing
+INFO  2026-03-20T15:10:59 +0ms service=bus type=session.diff subscribing
+INFO  2026-03-20T15:10:59 +0ms service=format init
+INFO  2026-03-20T15:10:59 +0ms service=bus type=file.edited subscribing
+INFO  2026-03-20T15:10:59 +1ms service=lsp serverIds=deno, typescript, vue, eslint, oxlint, biome, gopls, ruby-lsp, pyright, elixir-ls, zls, csharp, fsharp, sourcekit-lsp, rust, clangd, svelte, astro, jdtls, kotlin-ls, yaml-ls, lua-ls, php intelephense, prisma, dart, ocaml-lsp, bash, terraform, texlab, dockerfile, gleam, clojure-lsp, nixd, tinymist, haskell-language-server, julials enabled LSP servers
+INFO  2026-03-20T15:10:59 +0ms service=file.watcher init
+INFO  2026-03-20T15:10:59 +1ms service=scheduler id=snapshot.cleanup run
+INFO  2026-03-20T15:10:59 +0ms service=scheduler id=tool.truncation.cleanup run
+INFO  2026-03-20T15:10:59 +0ms service=bus type=command.executed subscribing
+INFO  2026-03-20T15:10:59 +0ms service=file.watcher platform=darwin backend=fs-events watcher backend
+INFO  2026-03-20T15:10:59 +132ms service=vcs branch=main initialized
+INFO  2026-03-20T15:10:59 +0ms service=bus type=file.watcher.updated subscribing
+INFO  2026-03-20T15:11:00 +844ms service=server status=completed duration=1037 method=GET path=/health request
+INFO  2026-03-20T15:11:00 +17ms service=server method=POST path=/api/sse/chat request
+INFO  2026-03-20T15:11:00 +0ms service=server status=started method=POST path=/api/sse/chat request
+INFO  2026-03-20T15:11:01 +1241ms service=server status=completed duration=1241 method=POST path=/api/sse/chat request
+INFO  2026-03-20T15:11:01 +16ms service=server method=POST path=/api/sse/chat request
+INFO  2026-03-20T15:11:01 +0ms service=server status=started method=POST path=/api/sse/chat request
+INFO  2026-03-20T15:11:02 +147ms service=server status=completed duration=147 method=POST path=/api/sse/chat request
+INFO  2026-03-20T15:11:35 +33218ms service=server method=GET path=/doc request
+INFO  2026-03-20T15:11:35 +0ms service=server status=started method=GET path=/doc request
+INFO  2026-03-20T15:11:35 +57ms service=server status=completed duration=57 method=GET path=/doc request
+INFO  2026-03-20T15:11:43 +7923ms service=server method=GET path=/doc request
+INFO  2026-03-20T15:11:43 +0ms service=server status=started method=GET path=/doc request
+INFO  2026-03-20T15:11:43 +4ms service=server status=completed duration=4 method=GET path=/doc request
+INFO  2026-03-20T15:12:13 +30225ms service=server method=GET path=/doc request
+INFO  2026-03-20T15:12:13 +0ms service=server status=started method=GET path=/doc request
+INFO  2026-03-20T15:12:13 +2ms service=server status=completed duration=2 method=GET path=/doc request
+INFO  2026-03-20T15:12:25 +11974ms service=server method=GET path=/tui/open-models request
+INFO  2026-03-20T15:12:25 +0ms service=server status=started method=GET path=/tui/open-models request
+INFO  2026-03-20T15:12:26 +1458ms service=server status=completed duration=1458 method=GET path=/tui/open-models request
+INFO  2026-03-20T15:12:32 +5688ms service=bus type=file.watcher.updated publishing

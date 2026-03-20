@@ -2,7 +2,7 @@
     "name": "duckdb-model-router",
     "version": "1.0.0",
     "main": "index.js",
-    "type": "commonjs",
+    "type": "module",
     "dependencies": {
         "duckdb": "^1.0.0",
         "@ai-sdk/openai-compatible": "^1.0.0"

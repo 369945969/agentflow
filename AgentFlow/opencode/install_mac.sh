@@ -48,24 +48,38 @@ sudo chmod 777 /opt/duckdb
 mkdir -p "$PLUGIN_DIR"
 mkdir -p "$CONFIG_DIR"
 
-# 6. 迁移现有的 DuckDB 数据库 (内容比对)
+# 6. 迁移现有的 DuckDB 数据库 (内容比对 + 存在性检查)
 echo "🗄️ 检查 DuckDB 数据库状态..."
 TARGET_DB="/opt/duckdb/agentflow.duckdb"
 SOURCE_DB="$PROJECT_ROOT/../backend/apiServer/data/agentflow.duckdb"
 
+# 检查目标数据库中 models 表是否存在的函数
+check_table_exists() {
+    if [ ! -f "$1" ]; then return 1; fi
+    duckdb "$1" "SELECT count(*) FROM models;" >/dev/null 2>&1
+    return $?
+}
+
 if [ -f "$SOURCE_DB" ]; then
+    FORCE_REPLACE=false
     if [ -f "$TARGET_DB" ]; then
-        if cmp -s "$SOURCE_DB" "$TARGET_DB"; then
-            echo "ℹ️  数据库文件一致，无需迁移。"
-        else
+        if ! check_table_exists "$TARGET_DB"; then
+            echo "⚠️  目标数据库缺少 models 表，将强制更新。"
+            FORCE_REPLACE=true
+        elif ! cmp -s "$SOURCE_DB" "$TARGET_DB"; then
             echo "💾 数据库有差异，备份旧数据库: $TARGET_DB -> $TARGET_DB.$DATE_SUFFIX"
             mv "$TARGET_DB" "$TARGET_DB.$DATE_SUFFIX"
-            cp "$SOURCE_DB" "$TARGET_DB"
-            echo "✅ 已更新数据库: $TARGET_DB"
+            FORCE_REPLACE=true
+        else
+            echo "ℹ️  数据库文件一致且结构完整，无需迁移。"
         fi
     else
+        FORCE_REPLACE=true
+    fi
+
+    if [ "$FORCE_REPLACE" = true ]; then
         cp "$SOURCE_DB" "$TARGET_DB"
-        echo "✅ 已初始化数据库: $TARGET_DB"
+        echo "✅ 已同步数据库: $TARGET_DB"
     fi
 else
     echo "⚠️  警告: 未找到源数据库文件 $SOURCE_DB"
@@ -92,7 +106,25 @@ deploy_file() {
 
 deploy_file "$PROJECT_ROOT/plugin/index.js" "$PLUGIN_DIR/index.js"
 deploy_file "$PROJECT_ROOT/plugin/package.json" "$PLUGIN_DIR/package.json"
-deploy_file "$PROJECT_ROOT/opencode.json" "$CONFIG_DIR/opencode.json"
+
+# 特殊处理 opencode.json 以替换绝对路径
+echo "🚚 部署并配置 opencode.json..."
+if [ -f "$CONFIG_DIR/opencode.json" ]; then
+    # 临时生成一个处理过的版本进行比对
+    sed "s|PLUGIN_PATH_PLACEHOLDER|$PLUGIN_DIR|g" "$PROJECT_ROOT/opencode.json" > "$PROJECT_ROOT/opencode.json.tmp"
+    if cmp -s "$PROJECT_ROOT/opencode.json.tmp" "$CONFIG_DIR/opencode.json"; then
+        echo "ℹ️  opencode.json 已是最新，无需部署。"
+        rm "$PROJECT_ROOT/opencode.json.tmp"
+    else
+        echo "💾 opencode.json 有差异，备份旧文件..."
+        mv "$CONFIG_DIR/opencode.json" "$CONFIG_DIR/opencode.json.$DATE_SUFFIX"
+        mv "$PROJECT_ROOT/opencode.json.tmp" "$CONFIG_DIR/opencode.json"
+        echo "✅ 已更新: $CONFIG_DIR/opencode.json"
+    fi
+else
+    sed "s|PLUGIN_PATH_PLACEHOLDER|$PLUGIN_DIR|g" "$PROJECT_ROOT/opencode.json" > "$CONFIG_DIR/opencode.json"
+    echo "✅ 已初始化: $CONFIG_DIR/opencode.json"
+fi
 
 # 8. 安装插件依赖
 echo "📦 更新插件依赖..."
@@ -100,4 +132,4 @@ cd "$PLUGIN_DIR"
 npm install
 
 echo "✨ macOS 安装与更新完成！"
-echo "💡 运行 'opencode server start' 启动服务。"
+echo "💡 运行 'opencode serve' 启动服务。"

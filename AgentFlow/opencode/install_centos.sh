@@ -1,6 +1,7 @@
 #!/bin/bash
 
 # OpenCode + DuckDB 自动化安装脚本 (CentOS/RHEL)
+# 逻辑：程序检测安装，内容有差异才备份并替换
 set -e
 
 PROJECT_ROOT=$(pwd)
@@ -46,31 +47,43 @@ sudo chmod 777 /opt/duckdb
 mkdir -p "$PLUGIN_DIR"
 mkdir -p "$CONFIG_DIR"
 
-# 5. 迁移现有的 DuckDB 数据库 (保持名称一致)
+# 5. 迁移现有的 DuckDB 数据库 (内容比对)
+echo "🗄️ 检查 DuckDB 数据库状态..."
 TARGET_DB="/opt/duckdb/agentflow.duckdb"
-if [ -f "$TARGET_DB" ]; then
-    echo "💾 备份旧数据库: $TARGET_DB -> $TARGET_DB.$DATE_SUFFIX"
-    mv "$TARGET_DB" "$TARGET_DB.$DATE_SUFFIX"
-fi
-
-echo "🗄️ 迁移现有的 AgentFlow 数据库..."
 SOURCE_DB="$PROJECT_ROOT/../backend/apiServer/data/agentflow.duckdb"
+
 if [ -f "$SOURCE_DB" ]; then
-    cp "$SOURCE_DB" "$TARGET_DB"
-    echo "✅ 已成功将 $SOURCE_DB 复制到 $TARGET_DB"
+    if [ -f "$TARGET_DB" ]; then
+        if cmp -s "$SOURCE_DB" "$TARGET_DB"; then
+            echo "ℹ️  数据库文件一致，无需迁移。"
+        else
+            echo "💾 数据库有差异，备份旧数据库: $TARGET_DB -> $TARGET_DB.$DATE_SUFFIX"
+            mv "$TARGET_DB" "$TARGET_DB.$DATE_SUFFIX"
+            cp "$SOURCE_DB" "$TARGET_DB"
+            echo "✅ 已更新数据库: $TARGET_DB"
+        fi
+    else
+        cp "$SOURCE_DB" "$TARGET_DB"
+        echo "✅ 已初始化数据库: $TARGET_DB"
+    fi
 else
     echo "⚠️  警告: 未找到源数据库文件 $SOURCE_DB"
 fi
 
-# 6. 部署插件和配置文件 (备份并覆盖)
+# 6. 部署插件和配置文件 (内容比对)
 echo "🚚 部署插件和配置文件..."
 
 deploy_file() {
     local src=$1
     local dest=$2
     if [ -f "$dest" ]; then
-        echo "💾 备份旧文件: $dest -> $dest.$DATE_SUFFIX"
-        mv "$dest" "$dest.$DATE_SUFFIX"
+        if cmp -s "$src" "$dest"; then
+            echo "ℹ️  文件一致，无需部署: $dest"
+            return 0
+        else
+            echo "💾 文件有差异，备份旧文件: $dest -> $dest.$DATE_SUFFIX"
+            mv "$dest" "$dest.$DATE_SUFFIX"
+        fi
     fi
     cp "$src" "$dest"
     echo "✅ 已更新: $dest"
@@ -78,7 +91,25 @@ deploy_file() {
 
 deploy_file "$PROJECT_ROOT/plugin/index.js" "$PLUGIN_DIR/index.js"
 deploy_file "$PROJECT_ROOT/plugin/package.json" "$PLUGIN_DIR/package.json"
-deploy_file "$PROJECT_ROOT/opencode.json" "$CONFIG_DIR/opencode.json"
+
+# 特殊处理 opencode.json 以替换绝对路径
+echo "🚚 部署并配置 opencode.json..."
+if [ -f "$CONFIG_DIR/opencode.json" ]; then
+    # 临时生成一个处理过的版本进行比对
+    sed "s|PLUGIN_PATH_PLACEHOLDER|$PLUGIN_DIR|g" "$PROJECT_ROOT/opencode.json" > "$PROJECT_ROOT/opencode.json.tmp"
+    if cmp -s "$PROJECT_ROOT/opencode.json.tmp" "$CONFIG_DIR/opencode.json"; then
+        echo "ℹ️  opencode.json 已是最新，无需部署。"
+        rm "$PROJECT_ROOT/opencode.json.tmp"
+    else
+        echo "💾 opencode.json 有差异，备份旧文件..."
+        mv "$CONFIG_DIR/opencode.json" "$CONFIG_DIR/opencode.json.$DATE_SUFFIX"
+        mv "$PROJECT_ROOT/opencode.json.tmp" "$CONFIG_DIR/opencode.json"
+        echo "✅ 已更新: $CONFIG_DIR/opencode.json"
+    fi
+else
+    sed "s|PLUGIN_PATH_PLACEHOLDER|$PLUGIN_DIR|g" "$PROJECT_ROOT/opencode.json" > "$CONFIG_DIR/opencode.json"
+    echo "✅ 已初始化: $CONFIG_DIR/opencode.json"
+fi
 
 # 7. 安装插件依赖
 echo "📦 更新插件依赖..."
@@ -86,4 +117,4 @@ cd "$PLUGIN_DIR"
 npm install
 
 echo "✨ CentOS 安装与更新完成！"
-echo "💡 运行 'opencode server start' 启动服务。"
+echo "💡 运行 'opencode serve' 启动服务。"

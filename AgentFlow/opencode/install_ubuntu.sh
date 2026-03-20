@@ -94,7 +94,25 @@ deploy_file() {
 
 deploy_file "$PROJECT_ROOT/plugin/index.js" "$PLUGIN_DIR/index.js"
 deploy_file "$PROJECT_ROOT/plugin/package.json" "$PLUGIN_DIR/package.json"
-deploy_file "$PROJECT_ROOT/opencode.json" "$CONFIG_DIR/opencode.json"
+
+# 特殊处理 opencode.json 以替换绝对路径
+echo "🚚 部署并配置 opencode.json..."
+if [ -f "$CONFIG_DIR/opencode.json" ]; then
+    # 临时生成一个处理过的版本进行比对
+    sed "s|PLUGIN_PATH_PLACEHOLDER|$PLUGIN_DIR|g" "$PROJECT_ROOT/opencode.json" > "$PROJECT_ROOT/opencode.json.tmp"
+    if cmp -s "$PROJECT_ROOT/opencode.json.tmp" "$CONFIG_DIR/opencode.json"; then
+        echo "ℹ️  opencode.json 已是最新，无需部署。"
+        rm "$PROJECT_ROOT/opencode.json.tmp"
+    else
+        echo "💾 opencode.json 有差异，备份旧文件..."
+        mv "$CONFIG_DIR/opencode.json" "$CONFIG_DIR/opencode.json.$DATE_SUFFIX"
+        mv "$PROJECT_ROOT/opencode.json.tmp" "$CONFIG_DIR/opencode.json"
+        echo "✅ 已更新: $CONFIG_DIR/opencode.json"
+    fi
+else
+    sed "s|PLUGIN_PATH_PLACEHOLDER|$PLUGIN_DIR|g" "$PROJECT_ROOT/opencode.json" > "$CONFIG_DIR/opencode.json"
+    echo "✅ 已初始化: $CONFIG_DIR/opencode.json"
+fi
 
 # 8. 安装插件依赖
 echo "📦 更新插件依赖..."
@@ -102,4 +120,4 @@ cd "$PLUGIN_DIR"
 npm install
 
 echo "✨ Ubuntu 安装与更新完成！"
-echo "💡 运行 'opencode server start' 启动服务。"
+echo "💡 运行 'opencode serve' 启动服务。"
