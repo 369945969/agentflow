@@ -1,5 +1,6 @@
 #!/bin/bash
 
+export DEEPSEEK_API_KEY=sk-6696ebd5e41f4fd9a1a218b57a85ad6b
 # OpenCode 后台启动脚本
 # 逻辑：杀掉旧进程 -> 并在后台启动新进程 -> 输出日志到文件
 

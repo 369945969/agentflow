@@ -1,5 +1,6 @@
 #!/bin/bash
 
+export DEEPSEEK_API_KEY=sk-6696ebd5e41f4fd9a1a218b57a85ad6b
 # OpenCode 多模型路由动态验证脚本 (从 API 动态查询 ID)
 # 运行前请确保：1. Go 后端已启动(3000) 2. opencode server 已启动(3001)
 
