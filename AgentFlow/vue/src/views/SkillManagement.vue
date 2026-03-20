@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import BaseLayout from '../components/BaseLayout.vue'
+import { API_BASE_URL } from '../config/api'
 
 const isDrawerOpen = ref(false)
 const isInstallDrawerOpen = ref(false)
@@ -11,7 +12,7 @@ const skills = ref<any[]>([])
 
 const fetchSkills = async () => {
   try {
-    const response = await fetch('http://localhost:3000/api/skills/')
+    const response = await fetch(`${API_BASE_URL}/api/skills/`)
     const data = await response.json()
     skills.value = data.map((s: any) => ({
       ...s,
@@ -41,7 +42,7 @@ const handleInstall = async () => {
   if (!installUrl.value) return
   isInstalling.value = true
   try {
-    const response = await fetch('http://localhost:3000/api/skills/install', {
+    const response = await fetch(`${API_BASE_URL}/api/skills/install`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url: installUrl.value })
@@ -73,7 +74,7 @@ const closeDeleteModal = () => {
 const executeDelete = async () => {
   if (!skillToDelete.value) return
   try {
-    const response = await fetch(`http://localhost:3000/api/skills/${skillToDelete.value.id}`, {
+    const response = await fetch(`${API_BASE_URL}/api/skills/${skillToDelete.value.id}`, {
       method: 'DELETE'
     })
     if (response.ok) {

@@ -40,6 +40,7 @@ type Model struct {
 	APIKey      string    `json:"api_key" db:"api_key"`
 	ModelName   string    `json:"model_name" db:"model_name"`
 	Description string    `json:"description" db:"description"`
+	IsDefault   bool      `json:"is_default" db:"is_default"`
 	CreatedAt   time.Time `json:"created_at" db:"created_at"`
 }
 

@@ -1,35 +1,151 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import BaseLayout from '../components/BaseLayout.vue'
+import { API_BASE_URL } from '../config/api'
 
 // Layout state: 'grid' or 'list'
 const viewLayout = ref<'grid' | 'list'>('grid')
 
-// Create Agent state
-const isCreateModalOpen = ref(false)
-const newAgent = ref({
-  name: '',
-  description: '',
-  model: 'GPT-4',
-  tags: [] as string[]
+// Search state
+const searchQuery = ref('')
+
+// Models state
+const models = ref<any[]>([])
+const fetchModels = async () => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/models/`)
+    const data = await response.json()
+    models.value = data
+  } catch (error) {
+    console.error('Failed to fetch models:', error)
+  }
+}
+
+// Agents state
+const agents = ref<any[]>([])
+const fetchAgents = async () => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/agents/`)
+    const data = await response.json()
+    agents.value = data
+  } catch (error) {
+    console.error('Failed to fetch agents:', error)
+  }
+}
+
+const filteredAgents = computed(() => {
+  if (!searchQuery.value) return agents.value
+  const query = searchQuery.value.toLowerCase()
+  return agents.value.filter(agent => 
+    agent.name.toLowerCase().includes(query) || 
+    agent.description.toLowerCase().includes(query)
+  )
 })
 
-const agents = ref([
-  { id: 1, name: '智能客服助手', desc: '专业的客户服务自动化助手，能够处理常见问题咨询。', status: '已激活', model: 'GPT-4', icon: 'lucide:message-circle', color: '#3B9BFF' },
-  { id: 2, name: '数据分析专家', desc: '专业的数据分析和可视化助手，擅长处理各种数据集。', status: '已激活', model: 'Claude-3', icon: 'lucide:bar-chart', color: '#87B4FF' },
-  { id: 3, name: '代码生成助手', desc: '智能代码生成和优化助手，支持多种编程语言。', status: '草稿', model: 'GPT-4', icon: 'lucide:code', color: '#00E5FF' },
-])
+onMounted(() => {
+  fetchModels()
+  fetchAgents()
+})
+
+// Create/Edit Agent state
+const isCreateModalOpen = ref(false)
+const isEditing = ref(false)
+const newAgent = ref<any>({
+  name: '',
+  description: '',
+  model: '',
+  system_prompt: ''
+})
 
 const toggleLayout = (type: 'grid' | 'list') => {
   viewLayout.value = type
 }
 
 const openCreateModal = () => {
+  isEditing.value = false
+  newAgent.value = {
+    name: '',
+    description: '',
+    model: '',
+    system_prompt: ''
+  }
+  // Set default model
+  const defaultModel = models.value.find((m: any) => m.is_default)
+  if (defaultModel) {
+    newAgent.value.model = defaultModel.id
+  } else if (models.value.length > 0) {
+    newAgent.value.model = models.value[0].id
+  }
+  isCreateModalOpen.value = true
+}
+
+const openEditModal = (agent: any) => {
+  isEditing.value = true
+  newAgent.value = { ...agent }
   isCreateModalOpen.value = true
 }
 
 const closeCreateModal = () => {
   isCreateModalOpen.value = false
+}
+
+const handleSave = async () => {
+  if (isEditing.value) {
+    await handleUpdate()
+  } else {
+    await handleCreate()
+  }
+}
+
+const handleCreate = async () => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/agents/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newAgent.value)
+    })
+    if (response.ok) {
+      await fetchAgents()
+      closeCreateModal()
+    }
+  } catch (error) {
+    console.error('Failed to create agent:', error)
+  }
+}
+
+const handleUpdate = async () => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/agents/${newAgent.value.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newAgent.value)
+    })
+    if (response.ok) {
+      await fetchAgents()
+      closeCreateModal()
+    }
+  } catch (error) {
+    console.error('Failed to update agent:', error)
+  }
+}
+
+const handleDelete = async (id: string) => {
+  if (!confirm('确定要删除这个Agent吗?')) return
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/agents/${id}`, {
+      method: 'DELETE'
+    })
+    if (response.ok) {
+      await fetchAgents()
+    }
+  } catch (error) {
+    console.error('Failed to delete agent:', error)
+  }
+}
+
+const getModelName = (modelId: string) => {
+  const model = models.value.find(m => m.id === modelId)
+  return model ? model.name : modelId
 }
 </script>
 
@@ -75,133 +191,107 @@ const closeCreateModal = () => {
 
       <!-- Filters & Search -->
       <div style="background-color: color-mix( in oklab , #fff 5% , transparent ); backdrop-filter: blur(24px); border-color: color-mix( in oklab , #3B9BFF 30% , transparent );" class="p-6 border-[1px] border-solid rounded-2xl">
-        <div class="flex items-center gap-6 mb-6">
-          <div class="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2 flex items-center gap-3 backdrop-blur-md">
+        <div class="flex items-center gap-6">
+          <div class="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3 flex items-center gap-3 backdrop-blur-md">
             <iconify-icon icon="lucide:search" class="text-white/40"></iconify-icon>
-            <input type="text" placeholder="按名称/标签/技能搜索Agent..." class="bg-transparent border-none outline-none text-sm text-white/70 w-full">
+            <input v-model="searchQuery" type="text" placeholder="按名称/描述搜索Agent..." class="bg-transparent border-none outline-none text-sm text-white/70 w-full">
           </div>
-          <div class="flex items-center gap-3">
-            <select class="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white/60 outline-none">
-              <option>全部状态</option>
-              <option>已激活</option>
-              <option>草稿</option>
-            </select>
-            <select class="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white/60 outline-none">
-              <option>全部模型</option>
-              <option>GPT-4</option>
-              <option>Claude-3</option>
-            </select>
-          </div>
-        </div>
-        <div class="flex gap-2">
-           <span v-for="tag in ['全部', '对话助手', '数据分析', '代码生成']" :key="tag" 
-             class="px-4 py-1.5 rounded-full text-xs border border-white/10 cursor-pointer transition-all hover:bg-white/10"
-             :class="tag === '全部' ? 'bg-[#3B9BFF]/20 border-[#3B9BFF]/50 text-[#3B9BFF]' : 'text-white/50 bg-white/5'"
-           >{{ tag }}</span>
         </div>
       </div>
 
       <!-- Agent Content -->
-      <div :class="[viewLayout === 'grid' ? 'grid grid-cols-3 gap-6' : 'flex flex-col gap-4']">
+      <div :class="[viewLayout === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6' : 'flex flex-col gap-4']">
         <div 
-          v-for="agent in agents" :key="agent.id"
+          v-for="agent in filteredAgents" :key="agent.id"
           class="group p-6 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl hover:shadow-2xl hover:border-[#3B9BFF]/30 transition-all duration-300"
           :class="viewLayout === 'list' ? 'flex items-center gap-6' : ''"
         >
           <div class="flex items-center gap-4" :class="viewLayout === 'list' ? 'w-1/4' : 'mb-4'">
-            <div class="w-12 h-12 rounded-xl flex items-center justify-center shrink-0" :style="{backgroundColor: agent.color+'20', color: agent.color}">
-              <iconify-icon :icon="agent.icon" class="text-2xl"></iconify-icon>
+            <div class="w-12 h-12 rounded-xl flex items-center justify-center shrink-0 bg-[#3B9BFF]/20 text-[#3B9BFF]">
+              <iconify-icon icon="lucide:user" class="text-2xl"></iconify-icon>
             </div>
             <div>
               <h3 class="text-white/95 font-semibold text-lg">{{ agent.name }}</h3>
               <div class="flex items-center gap-2 mt-1">
-                <span class="px-2 py-0.5 rounded text-[10px] bg-white/10 text-white/50">{{ agent.model }}</span>
-                <span class="text-[10px] text-[#50C878]">{{ agent.status }}</span>
+                <span class="px-2 py-0.5 rounded text-[10px] bg-white/10 text-white/50">{{ getModelName(agent.model) }}</span>
+                <span class="text-[10px] text-[#50C878]">已激活</span>
               </div>
             </div>
           </div>
           
-          <p class="text-sm text-white/50 flex-1" :class="viewLayout === 'grid' ? 'mb-6 line-clamp-2' : ''">{{ agent.desc }}</p>
+          <p class="text-sm text-white/50 flex-1" :class="viewLayout === 'grid' ? 'mb-6 line-clamp-2' : ''">{{ agent.description }}</p>
           
           <div class="flex items-center gap-3" :class="viewLayout === 'grid' ? 'justify-between' : 'w-48 justify-end'">
-            <span v-if="viewLayout === 'grid'" class="text-[10px] text-white/30">Modified 2h ago</span>
+            <span v-if="viewLayout === 'grid'" class="text-[10px] text-white/30">Created at {{ new Date(agent.created_at).toLocaleDateString() }}</span>
             <div class="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-              <button class="w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-white/60 hover:text-white hover:bg-[#3B9BFF]/20"><iconify-icon icon="lucide:edit-3"></iconify-icon></button>
-              <button class="w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-white/60 hover:text-white hover:bg-[#3B9BFF]/20"><iconify-icon icon="lucide:play"></iconify-icon></button>
+              <button @click.stop="openEditModal(agent)" class="w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-white/60 hover:text-white hover:bg-[#3B9BFF]/20" title="编辑"><iconify-icon icon="lucide:edit-3"></iconify-icon></button>
+              <button @click.stop="handleDelete(agent.id)" class="w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-white/40 hover:text-red-400 hover:bg-red-500/10 transition-all" title="删除"><iconify-icon icon="lucide:trash-2"></iconify-icon></button>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Create New Agent Modal (Sidebar Style) -->
+      <!-- Create New Agent Modal (Centered Modal) -->
       <Transition 
         enter-active-class="transition duration-300 ease-out"
-        enter-from-class="translate-x-full"
-        enter-to-class="translate-x-0"
+        enter-from-class="opacity-0 scale-95"
+        enter-to-class="opacity-100 scale-100"
         leave-active-class="transition duration-200 ease-in"
-        leave-from-class="translate-x-0"
-        leave-to-class="translate-x-full"
+        leave-from-class="opacity-100 scale-100"
+        leave-to-class="opacity-0 scale-95"
       >
-        <aside 
+        <div 
           v-if="isCreateModalOpen"
-          class="fixed top-0 right-0 w-[500px] h-full z-[100] bg-[#1A2536]/95 backdrop-blur-3xl border-l border-[#3B9BFF]/30 shadow-[-20px_0_50px_rgba(0,0,0,0.5)] flex flex-col"
+          class="fixed inset-0 z-[120] flex items-center justify-center p-6"
         >
-          <div class="flex justify-between items-center p-6 border-b border-white/10">
-            <h2 class="text-xl font-bold text-white/95">创建新Agent</h2>
-            <button @click="closeCreateModal" class="w-10 h-10 flex items-center justify-center text-white/40 hover:text-white hover:bg-white/5 rounded-full"><iconify-icon icon="lucide:x" class="text-xl"></iconify-icon></button>
-          </div>
+          <div @click="closeCreateModal" class="absolute inset-0 bg-black/60 backdrop-blur-md"></div>
+          <div class="relative w-full max-w-2xl max-h-[90vh] bg-[#1A2536] border border-white/10 rounded-3xl shadow-2xl overflow-hidden flex flex-col">
+            <div class="p-6 border-b border-white/10 flex justify-between items-center bg-white/5">
+              <h2 class="text-xl font-bold text-white/95">{{ isEditing ? "编辑Agent" : "创建新Agent" }}</h2>
+              <button @click="closeCreateModal" class="w-8 h-8 rounded-full flex items-center justify-center hover:bg-white/10 text-white/40"><iconify-icon icon="lucide:x" class="text-xl"></iconify-icon></button>
+            </div>
 
-          <div class="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar">
-            <!-- Icon/Name -->
-            <div class="flex items-center gap-6">
-              <div class="w-20 h-20 bg-[#3B9BFF]/10 border-2 border-dashed border-[#3B9BFF]/30 rounded-2xl flex flex-col items-center justify-center text-[#3B9BFF] hover:bg-[#3B9BFF]/20 cursor-pointer transition-all">
-                <iconify-icon icon="lucide:image-plus" class="text-2xl mb-1"></iconify-icon>
-                <span class="text-[10px]">选择图标</span>
+            <div class="flex-1 overflow-y-auto p-8 space-y-6 custom-scrollbar">
+              <div class="space-y-4">
+                <label class="text-xs text-white/40 block font-medium uppercase tracking-widest">Agent名称</label>
+                <input v-model="newAgent.name" type="text" placeholder="例如：智能客服专家" class="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-[#3B9BFF]/50 transition-all">
               </div>
-              <div class="flex-1 space-y-4">
-                <div>
-                  <label class="text-xs text-white/40 block mb-2 font-medium uppercase tracking-widest">Agent名称</label>
-                  <input type="text" placeholder="给你的Agent起个名字..." class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-[#3B9BFF]/50 transition-all">
+
+              <div class="space-y-4">
+                <label class="text-xs text-white/40 block font-medium uppercase tracking-widest">角色描述</label>
+                <textarea v-model="newAgent.description" placeholder="简单描述这个Agent的功能..." rows="3" class="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-[#3B9BFF]/50 transition-all resize-none"></textarea>
+              </div>
+
+              <div class="space-y-4">
+                <label class="text-xs text-white/40 block font-medium uppercase tracking-widest">绑定基础模型</label>
+                <div class="grid grid-cols-2 gap-3">
+                  <div v-for="m in models" :key="m.id" 
+                    @click="newAgent.model = m.id"
+                    class="p-4 border rounded-2xl cursor-pointer transition-all flex flex-col gap-1 group relative overflow-hidden"
+                    :class="newAgent.model === m.id ? 'border-[#3B9BFF] bg-[#3B9BFF]/10' : 'border-white/5 bg-white/5 hover:border-white/20'"
+                  >
+                    <div class="flex items-center justify-between relative z-10">
+                      <span class="text-sm font-semibold" :class="newAgent.model === m.id ? 'text-[#3B9BFF]' : 'text-white/80'">{{ m.name }}</span>
+                      <iconify-icon v-if="newAgent.model === m.id" icon="lucide:check-circle-2" class="text-[#3B9BFF]"></iconify-icon>
+                    </div>
+                    <div class="text-[10px] text-white/40 relative z-10">{{ m.provider }} · {{ m.model_name }}</div>
+                    <div v-if="m.is_default" class="absolute top-0 right-0 px-2 py-0.5 bg-[#3B9BFF]/20 text-[#3B9BFF] text-[8px] font-bold uppercase rounded-bl-lg">Default</div>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <!-- Description -->
-            <div class="space-y-4">
-              <label class="text-xs text-white/40 block mb-2 font-medium uppercase tracking-widest">角色描述</label>
-              <textarea placeholder="描述该Agent的主要职责和专长..." rows="4" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-[#3B9BFF]/50 transition-all resize-none"></textarea>
-            </div>
-
-            <!-- Model Selection -->
-            <div class="space-y-4">
-              <label class="text-xs text-white/40 block mb-2 font-medium uppercase tracking-widest">绑定基础模型</label>
-              <div class="grid grid-cols-2 gap-4">
-                <div v-for="m in ['GPT-4 Turbo', 'Claude-3 Opus', 'Llama-3 (Local)', 'Gemini Pro']" :key="m" 
-                  class="p-4 bg-white/5 border rounded-xl cursor-pointer hover:bg-[#3B9BFF]/10 transition-all"
-                  :class="m === 'GPT-4 Turbo' ? 'border-[#3B9BFF]/50 bg-[#3B9BFF]/10' : 'border-white/5'"
-                >
-                  <div class="text-sm text-white/90 font-medium">{{ m }}</div>
-                  <div class="text-[10px] text-white/30">Stable & High Performance</div>
-                </div>
+              <div class="space-y-4">
+                <label class="text-xs text-white/40 block font-medium uppercase tracking-widest">系统提示词 (System Prompt)</label>
+                <textarea v-model="newAgent.system_prompt" placeholder="设置Agent的行为指令..." rows="5" class="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white/80 outline-none focus:border-[#3B9BFF]/50 transition-all font-mono"></textarea>
               </div>
             </div>
 
-            <!-- System Prompt -->
-            <div class="space-y-4">
-              <div class="flex justify-between items-center">
-                <label class="text-xs text-white/40 font-medium uppercase tracking-widest">系统提示词 (System Prompt)</label>
-                <button class="text-[10px] text-[#3B9BFF] hover:underline">使用模板</button>
-              </div>
-              <textarea placeholder="你是一个专业的..." rows="6" class="w-full bg-[#0F1928] border border-white/10 rounded-xl px-4 py-3 text-sm text-white/70 outline-none focus:border-[#3B9BFF]/50 transition-all font-mono"></textarea>
+            <div class="p-6 border-t border-white/10 bg-white/5 flex gap-4">
+              <button @click="closeCreateModal" class="flex-1 py-3 rounded-xl border border-white/10 text-white/60 hover:bg-white/5 transition-all text-sm">取消</button>
+              <button @click="handleSave" class="flex-1 py-3 rounded-xl bg-[#3B9BFF] text-white font-bold shadow-[0_0_20px_rgba(59,155,255,0.4)] hover:bg-[#2A7FDB] transition-all text-sm">{{ isEditing ? "更新Agent" : "确认创建" }}</button>
             </div>
           </div>
-
-          <!-- Footer Actions -->
-          <div class="p-6 border-t border-white/10 bg-white/5 backdrop-blur-md flex gap-4">
-            <button @click="closeCreateModal" class="flex-1 py-3 rounded-xl border border-white/10 text-white/60 hover:bg-white/5 transition-all">取消</button>
-            <button class="flex-1 py-3 rounded-xl bg-[#3B9BFF] text-white font-bold shadow-[0_0_20px_rgba(59,155,255,0.4)] hover:bg-[#2A7FDB] transition-all">确认创建</button>
-          </div>
-        </aside>
+        </div>
       </Transition>
 
       <!-- Overlay for modal -->

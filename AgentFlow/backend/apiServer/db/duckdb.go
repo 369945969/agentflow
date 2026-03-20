@@ -39,13 +39,25 @@ func InitDB() {
 		`CREATE TABLE IF NOT EXISTS skills (id VARCHAR PRIMARY KEY, name VARCHAR, type VARCHAR, description TEXT, version VARCHAR, icon VARCHAR, color VARCHAR, logic TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`,
 		`CREATE TABLE IF NOT EXISTS agents (id VARCHAR PRIMARY KEY, name VARCHAR, description TEXT, model VARCHAR, system_prompt TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`,
 		`CREATE TABLE IF NOT EXISTS edges (id VARCHAR PRIMARY KEY, from_id VARCHAR, to_id VARCHAR, type VARCHAR, metadata JSON, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`,
-		`CREATE TABLE IF NOT EXISTS models (id VARCHAR PRIMARY KEY, name VARCHAR, provider VARCHAR, base_url VARCHAR, api_key VARCHAR, model_name VARCHAR, description TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`,
+		`CREATE TABLE IF NOT EXISTS models (id VARCHAR PRIMARY KEY, name VARCHAR, provider VARCHAR, base_url VARCHAR, api_key VARCHAR, model_name VARCHAR, description TEXT, is_default BOOLEAN DEFAULT FALSE, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`,
 	}
 
 	for _, q := range queries {
 		_, err := DB.Exec(q)
 		if err != nil {
 			log.Fatalf("Failed to initialize database table: %v", err)
+		}
+	}
+
+	// Migrations: check if is_default column exists in models table
+	_, err = DB.Exec("SELECT is_default FROM models LIMIT 1")
+	if err != nil {
+		log.Println("Migration: Adding is_default column to models table...")
+		_, err = DB.Exec("ALTER TABLE models ADD COLUMN is_default BOOLEAN DEFAULT FALSE")
+		if err != nil {
+			log.Printf("Failed to migrate models table: %v", err)
+		} else {
+			log.Println("✅ Migration successful: is_default column added")
 		}
 	}
 

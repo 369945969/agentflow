@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import BaseLayout from '../components/BaseLayout.vue'
+import { API_BASE_URL } from '../config/api'
 
 const models = ref<any[]>([])
 
 const fetchModels = async () => {
   try {
-    const response = await fetch('http://localhost:3000/api/models/')
+    const response = await fetch(`${API_BASE_URL}/api/models/`)
     const data = await response.json()
     models.value = data
   } catch (error) {
@@ -20,16 +21,17 @@ onMounted(() => {
 
 
 const isCreateModalOpen = ref(false)
-const newModel = ref({ name: '', provider: 'OpenAI', base_url: '', api_key: '', model_name: '', description: '' })
+const newModel = ref({ name: '', provider: 'OpenAI', base_url: '', api_key: '', model_name: '', description: '', is_default: false })
 
 const openCreateModal = () => {
   isCreateModalOpen.value = true
   isEditing.value = false
+  newModel.value = { name: '', provider: 'OpenAI', base_url: '', api_key: '', model_name: '', description: '', is_default: false }
 }
 
 const closeCreateModal = () => {
   isCreateModalOpen.value = false
-  newModel.value = { name: '', provider: '', base_url: '', api_key: '', model_name: '', description: '' }
+  newModel.value = { name: '', provider: 'OpenAI', base_url: '', api_key: '', model_name: '', description: '', is_default: false }
 }
 
 
@@ -41,11 +43,27 @@ const openEditModal = (model: any) => {
   isEditing.value = true
 }
 
+const handleSetDefault = async (model: any) => {
+  try {
+    const updatedModel = { ...model, is_default: true }
+    const response = await fetch(`${API_BASE_URL}/api/models/${model.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updatedModel)
+    })
+    if (response.ok) {
+      await fetchModels()
+    }
+  } catch (error) {
+    console.error('Failed to set default model:', error)
+  }
+}
+
 const handleSave = async () => {
   if (isEditing.value) {
     // Update
     try {
-      const response = await fetch(`http://localhost:3000/api/models/${newModel.value.id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/models/${newModel.value.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newModel.value)
@@ -65,7 +83,7 @@ const handleSave = async () => {
 
 const handleCreate = async () => {
   try {
-    const response = await fetch('http://localhost:3000/api/models/', {
+    const response = await fetch(`${API_BASE_URL}/api/models/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newModel.value)
@@ -83,7 +101,7 @@ const handleCreate = async () => {
 const handleDelete = async (id: string) => {
   if (!confirm('确定要删除这个模型吗?')) return
   try {
-    const response = await fetch(`http://localhost:3000/api/models/${id}`, {
+    const response = await fetch(`${API_BASE_URL}/api/models/${id}`, {
       method: 'DELETE'
     })
     if (response.ok) {
@@ -113,21 +131,33 @@ const handleDelete = async (id: string) => {
         >
           <div class="flex justify-between items-start mb-4">
             <div class="flex items-center gap-3">
-              <div class="w-12 h-12 rounded-xl flex items-center justify-center text-xl bg-white/5">
+              <div class="w-12 h-12 rounded-xl flex items-center justify-center text-xl bg-white/5 relative">
                 <iconify-icon icon="lucide:cpu" class="text-[#3B9BFF]"></iconify-icon>
+                <div v-if="model.is_default" class="absolute -top-1 -right-1 w-4 h-4 bg-[#3B9BFF] rounded-full flex items-center justify-center border-2 border-[#1A2536]">
+                  <iconify-icon icon="lucide:check" class="text-[8px] text-white"></iconify-icon>
+                </div>
               </div>
               <div>
-                <h3 class="text-lg font-semibold text-white/95">{{ model.name }}</h3>
+                <div class="flex items-center gap-2">
+                  <h3 class="text-lg font-semibold text-white/95">{{ model.name }}</h3>
+                  <span v-if="model.is_default" class="text-[10px] px-2 py-0.5 rounded-md bg-[#3B9BFF]/20 text-[#3B9BFF] font-medium uppercase tracking-wider">Default</span>
+                </div>
                 <div class="flex items-center gap-2 mt-1">
                   <span class="text-xs px-2 py-0.5 rounded-full bg-white/5 text-white/60">{{ model.provider }}</span>
                 </div>
               </div>
             </div>
-            <div class="flex gap-1"><button @click.stop="openEditModal(model)" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[#3B9BFF]/10 text-white/40 hover:text-[#3B9BFF] transition-all">
-              <iconify-icon icon="lucide:edit-3" class="text-sm"></iconify-icon>
-            </button><button @click.stop="handleDelete(model.id)" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-500/10 text-white/40 hover:text-red-400 transition-all">
-              <iconify-icon icon="lucide:trash-2" class="text-sm"></iconify-icon>
-            </button></div>
+            <div class="flex gap-1">
+              <button v-if="!model.is_default" @click.stop="handleSetDefault(model)" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-yellow-500/10 text-white/40 hover:text-yellow-400 transition-all" title="设为默认">
+                <iconify-icon icon="lucide:star" class="text-sm"></iconify-icon>
+              </button>
+              <button @click.stop="openEditModal(model)" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[#3B9BFF]/10 text-white/40 hover:text-[#3B9BFF] transition-all">
+                <iconify-icon icon="lucide:edit-3" class="text-sm"></iconify-icon>
+              </button>
+              <button @click.stop="handleDelete(model.id)" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-500/10 text-white/40 hover:text-red-400 transition-all">
+                <iconify-icon icon="lucide:trash-2" class="text-sm"></iconify-icon>
+              </button>
+            </div>
           </div>
           <p class="text-sm text-white/50 mb-6 line-clamp-2">{{ model.description }}</p>
           <div class="text-xs text-white/30 font-mono bg-black/20 p-2 rounded-lg">{{ model.model_name }}</div>
@@ -162,6 +192,16 @@ const handleDelete = async (id: string) => {
               <input v-model="newModel.model_name" placeholder="模型标识 (e.g. gpt-4)" class="w-full bg-black/20 border border-white/10 rounded-xl px-4 h-[50px] text-sm text-white outline-none">
               <input v-model="newModel.api_key" placeholder="API Key" type="password" class="w-full bg-black/20 border border-white/10 rounded-xl px-4 h-[50px] text-sm text-white outline-none">
               <textarea v-model="newModel.description" placeholder="模型描述..." class="w-full bg-black/20 border border-white/10 rounded-xl px-4 h-[50px] text-sm text-white outline-none h-24"></textarea>
+              
+              <div class="flex items-center gap-3 p-4 bg-white/5 rounded-xl border border-white/10 cursor-pointer hover:bg-white/10 transition-all" @click="newModel.is_default = !newModel.is_default">
+                <div class="w-10 h-6 rounded-full p-1 transition-all duration-300 relative" :class="newModel.is_default ? 'bg-[#3B9BFF]' : 'bg-white/10'">
+                  <div class="w-4 h-4 bg-white rounded-full shadow-md transition-all duration-300" :class="newModel.is_default ? 'translate-x-4' : 'translate-x-0'"></div>
+                </div>
+                <div>
+                  <div class="text-sm font-medium text-white/90">设为默认模型</div>
+                  <div class="text-xs text-white/40">设置为全局默认使用的语言模型</div>
+                </div>
+              </div>
             </div>
             <div class="p-6 border-t border-white/10 bg-white/5 flex gap-3">
               <button @click="closeCreateModal" class="flex-1 py-3 rounded-xl border border-white/10 text-sm text-white/60 hover:bg-white/5">取消</button>

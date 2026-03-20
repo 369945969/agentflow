@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS models (
     api_key VARCHAR,
     model_name VARCHAR NOT NULL,
     description TEXT,
+    is_default BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

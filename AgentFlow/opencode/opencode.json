@@ -1,0 +1,31 @@
+{
+    "server": {
+        "enabled": true,
+        "port": 3001,
+        "cors": true,
+        "sse": {
+            "enabled": true,
+            "path": "/api/sse/chat"
+        }
+    },
+    "plugins": [
+        "~/.config/opencode/plugins/duckdb-model-router"
+    ],
+    "model": "deepseek-chat",
+    "provider": {
+        "default": {
+            "npm": "@ai-sdk/openai-compatible",
+            "name": "deepseek",
+            "options": {
+                "baseURL": "https://api.deepseek.com/v1",
+                "apiKey": "sk-6696ebd5e41f4fd9a1a218b57a85ad6b"
+            },
+            "models": {
+                "agent": {
+                "id": "deepseek-chat",
+                "name": "deepseek-chat"
+                }
+            }
+        }
+    }
+}

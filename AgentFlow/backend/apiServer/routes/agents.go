@@ -14,6 +14,7 @@ func RegisterAgentRoutes(r *gin.Engine) {
 	{
 		agentGroup.GET("/", getAgents)
 		agentGroup.POST("/", createAgent)
+		agentGroup.PUT("/:id", updateAgent)
 		agentGroup.DELETE("/:id", deleteAgent)
 	}
 }
@@ -73,4 +74,22 @@ func deleteAgent(c *gin.Context) {
 		return
 	}
 	c.Status(http.StatusNoContent)
+}
+
+func updateAgent(c *gin.Context) {
+	id := c.Param("id")
+	var input models.Agent
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	_, err := db.DB.Exec("UPDATE agents SET name = ?, description = ?, model = ?, system_prompt = ? WHERE id = ?",
+		input.Name, input.Description, input.Model, input.SystemPrompt, id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update agent"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Agent updated"})
 }
