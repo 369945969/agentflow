@@ -104,6 +104,26 @@ deploy_file() {
     echo "✅ 已更新: $dest"
 }
 
+deploy_content() {
+    local dest=$1
+    local content=$2
+    local tmp="$PROJECT_ROOT/.opencode_tmp_$DATE_SUFFIX"
+
+    printf "%s" "$content" > "$tmp"
+    if [ -f "$dest" ]; then
+        if cmp -s "$tmp" "$dest"; then
+            echo "ℹ️  文件一致，无需部署: $dest"
+            rm -f "$tmp"
+            return 0
+        else
+            echo "💾 文件有差异，备份旧文件: $dest -> $dest.$DATE_SUFFIX"
+            mv "$dest" "$dest.$DATE_SUFFIX"
+        fi
+    fi
+    mv "$tmp" "$dest"
+    echo "✅ 已更新: $dest"
+}
+
 deploy_file "$PROJECT_ROOT/plugin/index.js" "$PLUGIN_DIR/index.js"
 deploy_file "$PROJECT_ROOT/plugin/package.json" "$PLUGIN_DIR/package.json"
 
@@ -130,6 +150,41 @@ fi
 echo "📦 更新插件依赖..."
 cd "$PLUGIN_DIR"
 npm install
+
+echo "🧠 记忆（opencode-mem）说明："
+echo "   - opencode-mem 是一个 OpenCode npm 插件，会在 opencode 启动时由 Bun 自动安装"
+echo "   - 存储在本地 SQLite（无单独 mem0 服务）"
+echo "   - 记忆按请求 body 的 variant 作为 user_id 进行隔离"
+echo "   - 需要配置 DEEPSEEK_API_KEY（用于 deepseek provider 与记忆提取）"
+
+OPENCODE_MEM_CONFIG_PATH="$CONFIG_DIR/opencode-mem.jsonc"
+OPENCODE_MEM_CONFIG_CONTENT='{
+  // OpenCode memory plugin: opencode-mem
+  // Repo: https://github.com/tickernelz/opencode-mem
+
+  "storagePath": "~/.opencode-mem/data",
+  "webServerEnabled": true,
+  "webServerPort": 4747,
+
+  "autoCaptureEnabled": true,
+  "autoCaptureLanguage": "auto",
+
+  // Use DeepSeek (OpenAI-compatible) for memory extraction.
+  // API key supports formats like env://DEEPSEEK_API_KEY
+  "memoryProvider": "openai-chat",
+  "memoryModel": "deepseek-chat",
+  "memoryApiUrl": "https://api.deepseek.com/v1",
+  "memoryApiKey": "env://DEEPSEEK_API_KEY",
+
+  "chatMessage": {
+    "enabled": true,
+    "maxMemories": 3,
+    "excludeCurrentSession": true,
+    "injectOn": "first"
+  }
+}
+'
+deploy_content "$OPENCODE_MEM_CONFIG_PATH" "$OPENCODE_MEM_CONFIG_CONTENT"
 
 echo "✨ macOS 安装与更新完成！"
 echo "💡 运行 'opencode serve' 启动服务。"

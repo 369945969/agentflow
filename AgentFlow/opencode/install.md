@@ -602,7 +602,42 @@ if (provider === 'anthropic') {
 
 ### 10.2 记忆功能集成
 
-可结合之前的「记忆插件」，在当前插件中追加记忆逻辑，实现「用户 ID → 模型 + 记忆」双重绑定。
+如果你不想单独跑 mem0 服务，推荐直接用 OpenCode 的 npm 插件 `opencode-mem` 作为记忆层（本地 SQLite + 向量检索 + 可视化界面）。
+
+全局配置 `~/.config/opencode/opencode.json` 增加：
+
+```json
+{
+  "plugin": ["opencode-mem"]
+}
+```
+
+然后在 `~/.config/opencode/opencode-mem.jsonc` 配置 opencode-mem（此项目的安装脚本会自动生成一个示例配置）：
+
+- 记忆提取模型：这里用 DeepSeek（OpenAI-compatible）
+- API Key 建议用 env 引用：`env://DEEPSEEK_API_KEY`
+
+无论使用哪种模式，都建议让每条消息都带上用户身份（用于“按用户存取记忆”）。
+
+在 OpenCode 1.2.10 的 `/session/{sessionID}/message` 请求里，建议用 `variant` 字段作为 user_id（会出现在事件流 `message.updated.info.variant` 里）：
+
+```json
+{
+  "variant": "user_001",
+  "parts": [{ "type": "text", "text": "你好" }]
+}
+```
+
+插件行为（推荐）
+
+- 在发送前：用 `variant(user_id)` + 用户问题去 mem0 检索记忆，并注入到系统提示词（system）中
+- 在会话 idle 时：把最近一轮 user/assistant 对话写回 mem0（user_id = variant）
+
+如何确认插件生效
+
+- 看服务日志里是否加载了插件目录（例如 `~/.config/opencode/plugins/duckdb-model-router/`）
+- 跑项目里的验证脚本：`bash verify_routing.sh`
+  - 设置 `DEEPSEEK_API_KEY` 后，会跑“跨 Session 记忆”用例：同一 user_id 创建两个 session，第二个 session 能回忆出第一轮写入的代号即为生效（通过 memory tool）
 
 ### 10.3 模型热加载
 

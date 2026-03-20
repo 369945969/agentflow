@@ -8,6 +8,10 @@ PORT=3001
 LOG_LEVEL="INFO"
 LOG_FILE="opencode.log"
 
+if [ -z "${DEEPSEEK_API_KEY:-}" ]; then
+    echo "🧠 提示：未设置 DEEPSEEK_API_KEY，deepseek provider 与 opencode-mem 可能不可用。"
+fi
+
 echo "🛑 正在停止现有的 OpenCode 进程..."
 
 # 查找并杀掉所有 opencode 相关的进程
