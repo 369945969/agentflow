@@ -479,7 +479,7 @@ onBeforeUnmount(() => {
 
 <template>
   <BaseLayout>
-    <div class="flex w-full h-full overflow-hidden bg-[#0F1928]">
+    <div class="flex w-full flex-1 min-h-0 overflow-hidden bg-[#0F1928]">
       <!-- Left Sidebar: Agent List -->
        <!-- Collapsed state: small sidebar with user avatars -->
        <div v-if="leftSidebarCollapsed" class="w-12 shrink-0 border-r border-white/10 bg-[#1A2536]/80 flex flex-col">
@@ -556,7 +556,7 @@ onBeforeUnmount(() => {
       </div>
 
       <!-- Main Chat Area -->
-      <main class="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <main class="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
         <div class="border-b border-white/10 bg-white/5 backdrop-blur-md shrink-0">
           <div class="h-16 flex items-center px-6">
             <div class="flex items-center gap-3">
@@ -567,7 +567,7 @@ onBeforeUnmount(() => {
         </div>
         <div
           ref="messageListRef"
-          class="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar"
+          class="message-scroll flex-1 min-h-0 overflow-y-scroll p-6 space-y-6 custom-scrollbar overscroll-contain"
           @scroll="handleMessageListScroll"
         >
           <div v-if="messageGroups.length === 0" class="flex flex-col items-center justify-center h-full text-white/30 text-sm">
@@ -723,6 +723,26 @@ onBeforeUnmount(() => {
 }
 .custom-scrollbar::-webkit-scrollbar { width: 4px; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(59, 155, 255, 0.2); border-radius: 10px; }
+.message-scroll {
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(59, 155, 255, 0.35) rgba(255, 255, 255, 0.06);
+}
+.message-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+.message-scroll::-webkit-scrollbar-thumb {
+  background: rgba(59, 155, 255, 0.28);
+  border-radius: 9999px;
+}
+.message-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(95, 180, 255, 0.45);
+}
+.message-scroll::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 9999px;
+}
 .chat-input {
   scrollbar-width: thin;
   scrollbar-color: rgba(59, 155, 255, 0.35) rgba(255, 255, 255, 0.06);

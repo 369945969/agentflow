@@ -451,25 +451,30 @@ func (c *Client) readEvents(ctx context.Context, cancel context.CancelFunc, out 
 			mid := getString(raw, "properties", "part", "messageID")
 			ptype := getString(raw, "properties", "part", "type")
 			text := getString(raw, "properties", "part", "text")
+			delta := getString(raw, "properties", "delta")
 			if ptype != "text" || text == "" {
 				continue
 			}
 			if assistantMsgID != "" && mid != assistantMsgID {
 				continue
 			}
-			prev := buf.String()
-			delta := text
-			if prev != "" && strings.HasPrefix(text, prev) {
-				delta = text[len(prev):]
-				buf.Reset()
-				buf.WriteString(text)
+			if delta != "" {
+				buf.WriteString(delta)
 			} else {
-				buf.WriteString(text)
+				prev := buf.String()
+				delta = text
+				if prev != "" && strings.HasPrefix(text, prev) {
+					delta = text[len(prev):]
+					buf.Reset()
+					buf.WriteString(text)
+				} else {
+					buf.WriteString(text)
+				}
 			}
 			if delta == "" {
 				continue
 			}
-			log.Printf("[opencode] event message.part.updated session_id=%s source_message_id=%s assistant_message_id=%s chunk_len=%d", sessionID, src.MessageID, mid, len(delta))
+			log.Printf("[opencode] event message.part.updated session_id=%s source_message_id=%s assistant_message_id=%s delta_len=%d text_len=%d used_native_delta=%t", sessionID, src.MessageID, mid, len(delta), len(text), getString(raw, "properties", "delta") != "")
 			gotText = true
 			out <- protocol.ServerMessage{
 				Type:      "stream_chunk",

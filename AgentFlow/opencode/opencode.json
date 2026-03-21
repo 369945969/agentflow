@@ -17,9 +17,9 @@
                 "apiKey": "{env:DEEPSEEK_API_KEY}"
             },
             "models": {
-                "deepseek-chat": {
-                    "id": "deepseek-chat",
-                    "name": "deepseek-chat"
+                "deepseek-reasoning": {
+                    "id": "deepseek-reasoning",
+                    "name": "deepseek-reasoning"
                 }
             }
         }

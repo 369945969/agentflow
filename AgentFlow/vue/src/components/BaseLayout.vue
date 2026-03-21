@@ -32,7 +32,7 @@ const toggleSidebar = () => {
 </script>
 
 <template>
-  <div class="font-[-apple-system,BlinkMacSystemFont,'Segoe UI'] w-full min-h-screen flex flex-col" style="line-height: 1.5; background: rgba(15, 25, 40, 1);">
+  <div class="font-[-apple-system,BlinkMacSystemFont,'Segoe UI'] w-full h-screen overflow-hidden flex flex-col" style="line-height: 1.5; background: rgba(15, 25, 40, 1);">
     <!-- Header -->
     <header style="background: linear-gradient(180deg, rgba(15, 25, 45, 0.85) 0%, rgba(20, 35, 60, 0.85) 100%);" class="w-full shrink-0 z-30">
       <div style="padding: 1rem 2rem;" class="flex justify-between items-center">
