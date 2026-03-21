@@ -14,9 +14,9 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"wsServer/internal/agentcore"
-	"wsServer/internal/protocol"
-	wsInternal "wsServer/internal/ws"
+	"agentServer/internal/agentcore"
+	"agentServer/internal/protocol"
+	wsInternal "agentServer/internal/ws"
 )
 
 func TestWebSocketForwarding(t *testing.T) {
@@ -118,10 +118,10 @@ func TestWebSocketForwarding(t *testing.T) {
 	})
 	core.SetEmitter(gateway)
 
-	wsServer := httptest.NewServer(gateway)
-	defer wsServer.Close()
+	testServer := httptest.NewServer(gateway)
+	defer testServer.Close()
 
-	u, err := url.Parse(wsServer.URL)
+	u, err := url.Parse(testServer.URL)
 	if err != nil {
 		t.Fatalf("parse url: %v", err)
 	}

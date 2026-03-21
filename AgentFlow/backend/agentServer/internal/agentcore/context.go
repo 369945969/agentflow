@@ -1,6 +1,6 @@
 package agentcore
 
-import "wsServer/internal/protocol"
+import "agentServer/internal/protocol"
 
 type ExecutionContext struct {
 	Message         protocol.Message

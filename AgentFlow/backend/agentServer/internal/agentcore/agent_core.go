@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"wsServer/internal/opencode"
-	"wsServer/internal/protocol"
+	"agentServer/internal/opencode"
+	"agentServer/internal/protocol"
 )
 
 type Emitter interface {

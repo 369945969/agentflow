@@ -1,4 +1,4 @@
-module wsServer
+module agentServer
 
 go 1.25.5
 

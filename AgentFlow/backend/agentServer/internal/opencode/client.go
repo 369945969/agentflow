@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"wsServer/internal/protocol"
+	"agentServer/internal/protocol"
 )
 
 type Client struct {

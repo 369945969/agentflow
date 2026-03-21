@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"wsServer/internal/protocol"
+	"agentServer/internal/protocol"
 )
 
 type SingleChatHandler struct {

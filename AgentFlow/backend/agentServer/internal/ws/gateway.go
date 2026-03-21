@@ -12,7 +12,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"wsServer/internal/protocol"
+	"agentServer/internal/protocol"
 )
 
 type MessageHandler func(ctx context.Context, connID string, msg protocol.Message)

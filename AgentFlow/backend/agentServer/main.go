@@ -10,10 +10,10 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"wsServer/internal/agentcore"
-	"wsServer/internal/config"
-	"wsServer/internal/protocol"
-	"wsServer/internal/ws"
+	"agentServer/internal/agentcore"
+	"agentServer/internal/config"
+	"agentServer/internal/protocol"
+	"agentServer/internal/ws"
 )
 
 var (

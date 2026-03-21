@@ -2,7 +2,7 @@
 
 # Go WebSocket 服务启动脚本
 PORT=3002
-LOG_FILE="ws_server.log"
+LOG_FILE="agent_server.log"
 
 echo "🛑 停止现有的 WebSocket 服务..."
 # 杀死占用 3002 端口的进程
@@ -14,9 +14,9 @@ fi
 
 echo "🚀 正在编译并启动 Go WebSocket 服务 (端口: $PORT)..."
 # 编译并运行
-go build -o ws_server main.go
+go build -o agent_server main.go
 
-nohup ./ws_server > "$LOG_FILE" 2>&1 &
+nohup ./agent_server > "$LOG_FILE" 2>&1 &
 NEW_PID=$!
 
 sleep 1
