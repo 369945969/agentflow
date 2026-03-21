@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>五子棋游戏</title>
+    <link rel="stylesheet" href="gobang.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><i class="fas fa-chess-board"></i> 五子棋游戏</h1>
+            <p class="subtitle">传统策略棋类游戏 - 五子连珠即获胜</p>
+        </header>
+
+        <div class="game-area">
+            <div class="game-info">
+                <div class="current-player">
+                    <div class="player-indicator black-player active">
+                        <div class="player-piece black"></div>
+                        <span>黑方</span>
+                    </div>
+                    <div class="vs">VS</div>
+                    <div class="player-indicator white-player">
+                        <div class="player-piece white"></div>
+                        <span>白方</span>
+                    </div>
+                </div>
+                
+                <div class="game-status">
+                    <div class="status-message" id="statusMessage">黑方先行</div>
+                    <div class="move-count">步数: <span id="moveCount">0</span></div>
+                </div>
+            </div>
+
+            <div class="board-container">
+                <div class="board" id="board">
+                    <!-- 棋盘将通过JavaScript动态生成 -->
+                </div>
+                <div class="board-overlay" id="winOverlay">
+                    <div class="win-message">
+                        <h2 id="winnerText"></h2>
+                        <button id="playAgainBtn" class="btn btn-primary">
+                            <i class="fas fa-redo"></i> 再来一局
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="controls">
+                <button id="restartBtn" class="btn btn-primary">
+                    <i class="fas fa-play-circle"></i> 重新开始
+                </button>
+                <button id="undoBtn" class="btn btn-secondary">
+                    <i class="fas fa-undo"></i> 悔棋
+                </button>
+                <button id="hintBtn" class="btn btn-secondary">
+                    <i class="fas fa-lightbulb"></i> 提示
+                </button>
+                <button id="rulesBtn" class="btn btn-outline">
+                    <i class="fas fa-question-circle"></i> 游戏规则
+                </button>
+            </div>
+        </div>
+
+        <div class="rules-modal" id="rulesModal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3><i class="fas fa-book"></i> 五子棋规则</h3>
+                    <button class="close-modal" id="closeRulesBtn">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="rule-item">
+                        <div class="rule-icon"><i class="fas fa-chess-pawn"></i></div>
+                        <div class="rule-text">
+                            <h4>基本规则</h4>
+                            <p>五子棋使用15×15的棋盘，黑方先行，双方轮流在棋盘交叉点上落子。</p>
+                        </div>
+                    </div>
+                    <div class="rule-item">
+                        <div class="rule-icon"><i class="fas fa-trophy"></i></div>
+                        <div class="rule-text">
+                            <h4>获胜条件</h4>
+                            <p>率先在横、竖、斜任意方向形成连续五个或以上同色棋子的一方获胜。</p>
+                        </div>
+                    </div>
+                    <div class="rule-item">
+                        <div class="rule-icon"><i class="fas fa-history"></i></div>
+                        <div class="rule-text">
+                            <h4>游戏功能</h4>
+                            <p>支持悔棋、重新开始、提示等功能。棋盘满子且无胜负时为平局。</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <p>© 2025 五子棋游戏 | 使用 HTML5, CSS3 & JavaScript 构建</p>
+        </footer>
+    </div>
+
+    <script src="gobang.js"></script>
+</body>
+</html>

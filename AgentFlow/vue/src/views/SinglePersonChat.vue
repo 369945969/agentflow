@@ -296,6 +296,38 @@ const sendMessage = () => {
   // Send via WebSocket
   const messageId = ws.sendText(inputText.value.trim(), selectedUserId.value)
   
+  const now = Date.now()
+  const thinkingKey = `${messageId}:thinking`
+  const answerKey = `${messageId}:answer`
+
+  if (thinkingEnabled.value && !simplifiedOutput.value) {
+    messages.value.push({
+      id: thinkingKey,
+      streamKey: thinkingKey,
+      type: 'agent',
+      content: '',
+      isThinking: true,
+      isFinal: false,
+      isStreaming: true,
+      timestamp: now
+    })
+    thinkingExpanded.value = {
+      ...thinkingExpanded.value,
+      [thinkingKey]: true
+    }
+  }
+
+  messages.value.push({
+    id: answerKey,
+    streamKey: answerKey,
+    type: 'agent',
+    content: '',
+    isThinking: false,
+    isFinal: false,
+    isStreaming: true,
+    timestamp: now
+  })
+
   console.log('[SinglePersonChat] Message dispatched with ID:', messageId)
   inputText.value = ''
 }

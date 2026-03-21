@@ -70,8 +70,9 @@ func (c *Client) Stream(ctx context.Context, msg protocol.Message) (<-chan proto
 		doneCh := make(chan struct{})
 		go func() {
 			defer close(doneCh)
-			var buf strings.Builder
-			c.readEvents(eventCtx, cancel, out, sessionID, msg, &buf)
+			var textBuf strings.Builder
+			var reasoningBuf strings.Builder
+			c.readEvents(eventCtx, cancel, out, sessionID, msg, &textBuf, &reasoningBuf)
 		}()
 
 		duckdbModelID := ""
@@ -353,7 +354,7 @@ func (c *Client) sendMessage(ctx context.Context, sessionID, providerID, modelID
 	return nil
 }
 
-func (c *Client) readEvents(ctx context.Context, cancel context.CancelFunc, out chan<- protocol.ServerMessage, sessionID string, src protocol.Message, buf *strings.Builder) {
+func (c *Client) readEvents(ctx context.Context, cancel context.CancelFunc, out chan<- protocol.ServerMessage, sessionID string, src protocol.Message, textBuf *strings.Builder, reasoningBuf *strings.Builder) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/event", nil)
 	if err != nil {
 		out <- protocol.ServerMessage{
@@ -451,30 +452,48 @@ func (c *Client) readEvents(ctx context.Context, cancel context.CancelFunc, out 
 			mid := getString(raw, "properties", "part", "messageID")
 			ptype := getString(raw, "properties", "part", "type")
 			text := getString(raw, "properties", "part", "text")
-			delta := getString(raw, "properties", "delta")
-			if ptype != "text" || text == "" {
+			if text == "" {
+				text = getString(raw, "properties", "part", "reasoning")
+			}
+			delta := firstNonEmpty(
+				getStringFlexible(raw, "properties", "delta"),
+				getStringFlexible(raw, "properties", "part", "delta"),
+				getStringFlexible(raw, "properties", "part", "text_delta"),
+				getStringFlexible(raw, "properties", "part", "reasoning_delta"),
+			)
+			if ptype != "text" && ptype != "reasoning" {
 				continue
 			}
 			if assistantMsgID != "" && mid != assistantMsgID {
 				continue
 			}
-			if delta != "" {
-				buf.WriteString(delta)
+			var targetBuf *strings.Builder
+			isThinking := ptype == "reasoning"
+			if isThinking {
+				targetBuf = reasoningBuf
 			} else {
-				prev := buf.String()
+				targetBuf = textBuf
+			}
+			if targetBuf == nil {
+				continue
+			}
+			if delta != "" {
+				targetBuf.WriteString(delta)
+			} else {
+				prev := targetBuf.String()
 				delta = text
 				if prev != "" && strings.HasPrefix(text, prev) {
 					delta = text[len(prev):]
-					buf.Reset()
-					buf.WriteString(text)
+					targetBuf.Reset()
+					targetBuf.WriteString(text)
 				} else {
-					buf.WriteString(text)
+					targetBuf.WriteString(text)
 				}
 			}
 			if delta == "" {
 				continue
 			}
-			log.Printf("[opencode] event message.part.updated session_id=%s source_message_id=%s assistant_message_id=%s delta_len=%d text_len=%d used_native_delta=%t", sessionID, src.MessageID, mid, len(delta), len(text), getString(raw, "properties", "delta") != "")
+			log.Printf("[opencode] event message.part.updated session_id=%s source_message_id=%s assistant_message_id=%s part_type=%s delta_len=%d text_len=%d used_native_delta=%t", sessionID, src.MessageID, mid, ptype, len(delta), len(text), getString(raw, "properties", "delta") != "")
 			gotText = true
 			out <- protocol.ServerMessage{
 				Type:      "stream_chunk",
@@ -483,11 +502,12 @@ func (c *Client) readEvents(ctx context.Context, cancel context.CancelFunc, out 
 				Timestamp: time.Now().UnixMilli(),
 				Payload: protocol.StreamChunkPayload{
 					Content:    delta,
-					IsThinking: false,
+					IsThinking: isThinking,
 					IsFinal:    false,
 					Metadata: map[string]interface{}{
 						"provider_id": getString(raw, "properties", "info", "providerID"),
 						"model_id":    getString(raw, "properties", "info", "modelID"),
+						"part_type":   ptype,
 					},
 				},
 			}
@@ -524,14 +544,14 @@ func (c *Client) readEvents(ctx context.Context, cancel context.CancelFunc, out 
 			if !gotText {
 				continue
 			}
-			log.Printf("[opencode] event session.idle session_id=%s source_message_id=%s final_len=%d", sessionID, src.MessageID, buf.Len())
+			log.Printf("[opencode] event session.idle session_id=%s source_message_id=%s final_len=%d", sessionID, src.MessageID, textBuf.Len())
 			out <- protocol.ServerMessage{
 				Type:      "stream_end",
 				MessageID: src.MessageID,
 				SessionID: src.SessionID,
 				Timestamp: time.Now().UnixMilli(),
 				Payload: protocol.StreamEndPayload{
-					Content: buf.String(),
+					Content: textBuf.String(),
 					IsFinal: true,
 				},
 			}
@@ -552,4 +572,47 @@ func getString(m map[string]interface{}, path ...string) string {
 	}
 	s, _ := cur.(string)
 	return s
+}
+
+func getValue(m map[string]interface{}, path ...string) interface{} {
+	var cur interface{} = m
+	for _, p := range path {
+		next, ok := cur.(map[string]interface{})
+		if !ok {
+			return nil
+		}
+		cur = next[p]
+	}
+	return cur
+}
+
+func getStringFlexible(m map[string]interface{}, path ...string) string {
+	v := getValue(m, path...)
+	if v == nil {
+		return ""
+	}
+	switch t := v.(type) {
+	case string:
+		return t
+	case map[string]interface{}:
+		if s, _ := t["text"].(string); s != "" {
+			return s
+		}
+		if s, _ := t["content"].(string); s != "" {
+			return s
+		}
+		if s, _ := t["delta"].(string); s != "" {
+			return s
+		}
+	}
+	return ""
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
 }

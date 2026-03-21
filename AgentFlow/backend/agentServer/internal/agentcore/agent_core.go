@@ -533,8 +533,13 @@ func (ac *AgentCore) streamOnce(ctx context.Context, execCtx ExecutionContext, m
 			switch ev.Type {
 			case "stream_chunk":
 				payload, _ := ev.Payload.(protocol.StreamChunkPayload)
-				log.Printf("[agentcore] upstream chunk conn_id=%s message_id=%s len=%d", execCtx.ConnectionID, execCtx.Message.MessageID, len(payload.Content))
-				frags := splitter.Split(payload.Content)
+				log.Printf("[agentcore] upstream chunk conn_id=%s message_id=%s len=%d is_thinking=%t", execCtx.ConnectionID, execCtx.Message.MessageID, len(payload.Content), payload.IsThinking)
+				var frags []chunkFragment
+				if payload.IsThinking {
+					frags = []chunkFragment{{content: payload.Content, isThinking: true}}
+				} else {
+					frags = splitter.Split(payload.Content)
+				}
 				for _, frag := range frags {
 					if frag.content == "" {
 						continue
