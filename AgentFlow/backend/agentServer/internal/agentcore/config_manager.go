@@ -10,6 +10,9 @@ type UserProfile struct {
 	UserID           string
 	CurrentSessionID string
 	Config           UserInteractionConfig
+	SystemPrompt     string
+	ModelID          string
+	SimplifiedOutput bool
 	CreatedAt        int64
 	UpdatedAt        int64
 }
@@ -78,10 +81,13 @@ func (cm *ConfigManager) GetUserProfile(userID string) (*UserProfile, error) {
 func (cm *ConfigManager) GetDefaultProfile(userID string) *UserProfile {
 	now := time.Now().Unix()
 	return &UserProfile{
-		UserID:    userID,
-		Config:    cm.DefaultConfig(),
-		CreatedAt: now,
-		UpdatedAt: now,
+		UserID:           userID,
+		Config:           cm.DefaultConfig(),
+		SystemPrompt:     "",
+		ModelID:          "",
+		SimplifiedOutput: false,
+		CreatedAt:        now,
+		UpdatedAt:        now,
 	}
 }
 
@@ -120,10 +126,13 @@ func (cm *ConfigManager) GetOrCreate(userID string) *UserProfile {
 		return p
 	}
 	p = &UserProfile{
-		UserID:    userID,
-		Config:    cm.defaultCfg,
-		CreatedAt: now,
-		UpdatedAt: now,
+		UserID:           userID,
+		Config:           cm.defaultCfg,
+		SystemPrompt:     "",
+		ModelID:          "",
+		SimplifiedOutput: false,
+		CreatedAt:        now,
+		UpdatedAt:        now,
 	}
 	cm.byUser[userID] = p
 	return p

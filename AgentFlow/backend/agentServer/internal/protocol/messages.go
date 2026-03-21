@@ -3,6 +3,7 @@ package protocol
 type Message struct {
 	MessageID string          `json:"message_id"`
 	SessionID string          `json:"session_id"`
+	GroupID   string          `json:"group_id,omitempty"`
 	UserID    string          `json:"user_id"`
 	Type      string          `json:"type"`
 	Content   MessageContent  `json:"content"`

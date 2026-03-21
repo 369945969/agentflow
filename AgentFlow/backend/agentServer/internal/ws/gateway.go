@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"log"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -78,11 +79,13 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	wsConn, err := g.upgrader.Upgrade(w, r, nil)
 	if err != nil {
+		log.Printf("[ws] upgrade failed remote=%s err=%v", r.RemoteAddr, err)
 		return
 	}
 
 	ctx, cancel := context.WithCancel(r.Context())
 	connID := generateID()
+	log.Printf("[ws] connection established conn_id=%s remote=%s path=%s", connID, r.RemoteAddr, r.URL.Path)
 	conn := newConn(
 		connID,
 		wsConn,
@@ -90,6 +93,7 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		ctx.Done(),
 		cancel,
 		func(id string) {
+			log.Printf("[ws] connection closed conn_id=%s", id)
 			g.mu.Lock()
 			delete(g.conns, id)
 			if sid, ok := g.connSession[id]; ok {
@@ -104,6 +108,7 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			g.mu.Unlock()
 		},
 		func(id string, sessionID string) {
+			log.Printf("[ws] session bound conn_id=%s session_id=%s", id, sessionID)
 			g.mu.Lock()
 			defer g.mu.Unlock()
 			prev, ok := g.connSession[id]
@@ -226,12 +231,15 @@ func (c *Conn) readLoop(ctx context.Context, handler MessageHandler) {
 
 		_, data, err := c.wsConn.ReadMessage()
 		if err != nil {
+			log.Printf("[ws] read failed conn_id=%s err=%v", c.ID, err)
 			return
 		}
 		atomic.StoreInt64(&c.lastPingUnix, time.Now().Unix())
+		log.Printf("[ws] received raw message conn_id=%s payload=%s", c.ID, string(data))
 
 		var msg protocol.Message
 		if err := json.Unmarshal(data, &msg); err != nil {
+			log.Printf("[ws] invalid json conn_id=%s err=%v", c.ID, err)
 			c.Send(protocol.ServerMessage{
 				Type:      "error",
 				Timestamp: time.Now().UnixMilli(),
@@ -244,7 +252,8 @@ func (c *Conn) readLoop(ctx context.Context, handler MessageHandler) {
 			continue
 		}
 
-		if msg.MessageID == "" || msg.UserID == "" || msg.Content.Text == "" {
+		if msg.MessageID == "" || msg.Content.Text == "" || (msg.GroupID == "" && msg.UserID == "") {
+			log.Printf("[ws] validation failed conn_id=%s message_id=%s user_id=%s group_id=%s", c.ID, msg.MessageID, msg.UserID, msg.GroupID)
 			c.Send(protocol.ServerMessage{
 				Type:      "error",
 				SessionID: msg.SessionID,
@@ -252,7 +261,7 @@ func (c *Conn) readLoop(ctx context.Context, handler MessageHandler) {
 				Timestamp: time.Now().UnixMilli(),
 				Payload: protocol.ErrorPayload{
 					Code:      "validation_error",
-					Message:   "message_id, user_id, content.text are required",
+					Message:   "message_id, content.text and (group_id or user_id) are required",
 					Retryable: false,
 				},
 			})
@@ -260,30 +269,39 @@ func (c *Conn) readLoop(ctx context.Context, handler MessageHandler) {
 		}
 
 		if msg.SessionID == "" {
-			msg.SessionID = generateID()
+			if msg.GroupID != "" {
+				msg.SessionID = msg.GroupID
+			} else {
+				msg.SessionID = generateID()
+			}
 		}
 
 		if c.onSession != nil {
 			c.onSession(c.ID, msg.SessionID)
 		}
 
-		if c.UserID == "" {
-			c.UserID = msg.UserID
-		} else if c.UserID != msg.UserID {
-			c.Send(protocol.ServerMessage{
-				Type:      "error",
-				SessionID: msg.SessionID,
-				MessageID: msg.MessageID,
-				Timestamp: time.Now().UnixMilli(),
-				Payload: protocol.ErrorPayload{
-					Code:      "user_mismatch",
-					Message:   "user_id mismatch",
-					Retryable: false,
-				},
-			})
-			continue
+		if msg.UserID != "" {
+			if c.UserID == "" {
+				c.UserID = msg.UserID
+				log.Printf("[ws] user bound conn_id=%s user_id=%s", c.ID, c.UserID)
+			} else if c.UserID != msg.UserID {
+				log.Printf("[ws] user mismatch conn_id=%s current_user=%s incoming_user=%s", c.ID, c.UserID, msg.UserID)
+				c.Send(protocol.ServerMessage{
+					Type:      "error",
+					SessionID: msg.SessionID,
+					MessageID: msg.MessageID,
+					Timestamp: time.Now().UnixMilli(),
+					Payload: protocol.ErrorPayload{
+						Code:      "user_mismatch",
+						Message:   "user_id mismatch",
+						Retryable: false,
+					},
+				})
+				continue
+			}
 		}
 
+		log.Printf("[ws] dispatching message conn_id=%s session_id=%s message_id=%s type=%s", c.ID, msg.SessionID, msg.MessageID, msg.Type)
 		go handler(ctx, c.ID, msg)
 	}
 }
@@ -299,12 +317,15 @@ func (c *Conn) writeLoop() {
 			if !ok {
 				return
 			}
+			log.Printf("[ws] sending ping conn_id=%s", c.ID)
 			_ = c.wsConn.WriteControl(websocket.PingMessage, []byte("ping"), time.Now().Add(5*time.Second))
 		case msg, ok := <-c.sendCh:
 			if !ok {
 				return
 			}
+			log.Printf("[ws] sending message conn_id=%s type=%s session_id=%s message_id=%s", c.ID, msg.Type, msg.SessionID, msg.MessageID)
 			if err := c.wsConn.WriteJSON(msg); err != nil {
+				log.Printf("[ws] send failed conn_id=%s err=%v", c.ID, err)
 				return
 			}
 		}

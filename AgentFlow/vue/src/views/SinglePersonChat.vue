@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import BaseLayout from '../components/BaseLayout.vue'
 import { API_BASE_URL, WEBSOCKET_URL } from '../config/api'
-import { getWebSocketInstance, type Message as WSMessage, type ServerMessage } from '../api/websocket'
+import { getWebSocketInstance, type ServerMessage } from '../api/websocket'
 
 // ========== Models ==========
 const models = ref<any[]>([])
@@ -18,6 +18,55 @@ const isConnected = ref(false)
 // ========== WebSocket ==========
 const ws = getWebSocketInstance()
 const wsInitialized = ref(false)
+
+const upsertAgentMessage = (message: ServerMessage) => {
+  const payload = message.payload
+  if (!payload || typeof payload !== 'object') return
+
+  const isThinking = Boolean(payload.is_thinking)
+  const streamKey = `${message.message_id || 'unknown'}:${isThinking ? 'thinking' : 'answer'}`
+  const existing = messages.value.find((item: any) => item.type === 'agent' && item.streamKey === streamKey)
+
+  if (message.type === 'stream_chunk') {
+    if (existing) {
+      existing.content += payload.content || ''
+      existing.timestamp = message.timestamp || Date.now()
+      existing.isFinal = false
+      return
+    }
+
+    messages.value.push({
+      id: streamKey,
+      streamKey,
+      type: 'agent',
+      content: payload.content || '',
+      isThinking,
+      isFinal: false,
+      timestamp: message.timestamp || Date.now()
+    })
+    return
+  }
+
+  const answerKey = `${message.message_id || 'unknown'}:answer`
+  const finalExisting = messages.value.find((item: any) => item.type === 'agent' && item.streamKey === answerKey)
+  if (finalExisting) {
+    finalExisting.content = payload.content || finalExisting.content
+    finalExisting.timestamp = message.timestamp || Date.now()
+    finalExisting.isThinking = false
+    finalExisting.isFinal = true
+    return
+  }
+
+  messages.value.push({
+    id: answerKey,
+    streamKey: answerKey,
+    type: 'agent',
+    content: payload.content || '',
+    isThinking: false,
+    isFinal: true,
+    timestamp: message.timestamp || Date.now()
+  })
+}
 
 // Update agent settings in database
 const updateAgentSettings = async () => {
@@ -59,31 +108,31 @@ const updateAgentSettings = async () => {
 const setupWebSocket = () => {
   if (wsInitialized.value) return
   wsInitialized.value = true
+  console.log('[SinglePersonChat] Initializing WebSocket listeners', { url: WEBSOCKET_URL })
   
   // Set up event listeners if not already set up
   ws.on('connection-change', (connected: boolean) => {
     isConnected.value = connected
-    console.log('WebSocket connection changed:', connected)
+    console.log('[SinglePersonChat] WebSocket connection changed:', connected)
   })
   
   ws.on('message', (message: ServerMessage) => {
-    console.log('Received message:', message)
-    // Handle incoming messages
+    console.log('[SinglePersonChat] Received message:', message)
     if (message.type === 'stream_chunk' || message.type === 'stream_end') {
-      // Add to messages
-      const payload = message.payload
-      if (payload && typeof payload === 'object') {
-        messages.value.push({
-          id: message.message_id || Date.now().toString(),
-          type: 'agent',
-          content: payload.content || '',
-          isThinking: payload.is_thinking || false,
-          isFinal: payload.is_final || false,
-          timestamp: message.timestamp || Date.now()
-        })
-      }
+      upsertAgentMessage(message)
     } else if (message.type === 'error') {
-      console.error('WebSocket error:', message.payload)
+      console.error('[SinglePersonChat] WebSocket error payload:', message.payload)
+      const payload = message.payload
+      const errorText = payload?.message || '服务暂时不可用，请稍后重试'
+      messages.value.push({
+        id: `error:${message.message_id || Date.now()}`,
+        type: 'agent',
+        content: `错误：${errorText}`,
+        isThinking: false,
+        isFinal: true,
+        isError: true,
+        timestamp: message.timestamp || Date.now()
+      })
     }
   })
   
@@ -95,6 +144,12 @@ const setupWebSocket = () => {
 
 const sendMessage = () => {
   if (!inputText.value.trim() || !selectedUserId.value) return
+  console.log('[SinglePersonChat] sendMessage called', {
+    selectedUserId: selectedUserId.value,
+    isConnected: ws.getConnectionStatus(),
+    sessionId: ws.getSessionId(),
+    textLength: inputText.value.trim().length
+  })
   
   const userMessage = {
     id: Date.now().toString(),
@@ -106,23 +161,9 @@ const sendMessage = () => {
   messages.value.push(userMessage)
   
   // Send via WebSocket
-  const messageId = ws.sendText(inputText.value.trim(), selectedUserId.value, undefined, {
-    target_agent_id: selectedUserId.value,
-    override_config: {
-      stream_mode: 'realtime',
-      enable_thinking: thinkingEnabled.value,
-      return_strategy: {
-        type: 'immediate',
-        final_result_marker: '[FINAL]',
-        chunk_size: 1024,
-        debounce_ms: 50
-      },
-      timeout_ms: 30000,
-      max_retries: 1
-    }
-  })
+  const messageId = ws.sendText(inputText.value.trim(), selectedUserId.value)
   
-  console.log('Message sent with ID:', messageId)
+  console.log('[SinglePersonChat] Message dispatched with ID:', messageId)
   inputText.value = ''
 }
 
@@ -270,6 +311,11 @@ watch(selectedUserId, () => {
     
     // Update WebSocket user
     ws.setUser(user.id)
+    ws.clearSession()
+    console.log('[SinglePersonChat] Selected user changed', {
+      userId: user.id,
+      userName: user.name
+    })
     
     // Clear previous messages when switching users
     messages.value = []
@@ -285,6 +331,7 @@ watch([thinkingEnabled, simplifiedOutput], () => {
 })
 
 onMounted(() => {
+  console.log('[SinglePersonChat] mounted', { websocketUrl: WEBSOCKET_URL })
   fetchModels()
   fetchUsers()
   setupWebSocket()

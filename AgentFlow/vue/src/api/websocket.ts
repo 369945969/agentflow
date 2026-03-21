@@ -84,10 +84,6 @@ export class AgentWebSocket {
   private maxReconnectAttempts = 5
   private reconnectDelay = 1000 // Start with 1 second
   private maxReconnectDelay = 30000 // Max 30 seconds
-  private heartbeatInterval: number | null = null
-  private heartbeatTimeout: number | null = null
-  private readonly heartbeatIntervalMs = 25000 // 25 seconds (slightly less than server's 30s ping interval)
-  private readonly heartbeatTimeoutMs = 5000 // 5 seconds to wait for pong
   private listeners: Map<WebSocketEvent, EventListener[]> = new Map()
   private isConnected = false
   private connectionId: string | null = null
@@ -105,11 +101,11 @@ export class AgentWebSocket {
     }
 
     try {
-      console.log('Connecting to WebSocket:', this.url)
+      console.log('[AgentWebSocket] Connecting to WebSocket:', this.url)
       this.ws = new WebSocket(this.url)
       this.setupEventListeners()
     } catch (error) {
-      console.error('Failed to create WebSocket connection:', error)
+      console.error('[AgentWebSocket] Failed to create WebSocket connection:', error)
       this.scheduleReconnect()
     }
   }
@@ -118,19 +114,22 @@ export class AgentWebSocket {
     if (!this.ws) return
 
     this.ws.onopen = (event) => {
-      console.log('WebSocket connected')
+      console.log('[AgentWebSocket] WebSocket connected:', this.url)
       this.isConnected = true
       this.reconnectAttempts = 0
       this.reconnectDelay = 1000
-      this.startHeartbeat()
       this.emit('open', event)
       this.emit('connection-change', true)
     }
 
     this.ws.onclose = (event) => {
-      console.log('WebSocket disconnected:', event.code, event.reason)
+      console.log('[AgentWebSocket] WebSocket disconnected:', {
+        url: this.url,
+        code: event.code,
+        reason: event.reason,
+        wasClean: event.wasClean
+      })
       this.isConnected = false
-      this.cleanupHeartbeat()
       this.emit('close', event)
       this.emit('connection-change', false)
       
@@ -141,17 +140,18 @@ export class AgentWebSocket {
     }
 
     this.ws.onerror = (error) => {
-      console.error('WebSocket error:', error)
+      console.error('[AgentWebSocket] WebSocket error:', error)
       this.emit('error', error)
     }
 
     this.ws.onmessage = (event) => {
       try {
+        console.log('[AgentWebSocket] Raw message received:', event.data)
         const data = JSON.parse(event.data) as ServerMessage
         this.handleIncomingMessage(data)
         this.emit('message', data)
       } catch (error) {
-        console.error('Failed to parse WebSocket message:', error, event.data)
+        console.error('[AgentWebSocket] Failed to parse WebSocket message:', error, event.data)
       }
     }
   }
@@ -162,31 +162,37 @@ export class AgentWebSocket {
       this.sessionId = message.session_id
     }
     
-    // Handle heartbeat pong (server may send ping, but we rely on client-initiated heartbeat)
-    if (message.type === 'pong') {
-      this.resetHeartbeatTimeout()
-    }
+    console.log('[AgentWebSocket] Parsed server message:', {
+      type: message.type,
+      messageId: message.message_id,
+      sessionId: message.session_id
+    })
   }
 
   send(message: Message): void {
     if (!this.isConnected || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      console.error('Cannot send message: WebSocket not connected')
+      console.error('[AgentWebSocket] Cannot send message: WebSocket not connected', {
+        isConnected: this.isConnected,
+        readyState: this.ws?.readyState
+      })
       return
     }
 
     try {
+      console.log('[AgentWebSocket] Sending message:', message)
       this.ws.send(JSON.stringify(message))
     } catch (error) {
-      console.error('Failed to send WebSocket message:', error)
+      console.error('[AgentWebSocket] Failed to send WebSocket message:', error, message)
     }
   }
 
   sendText(text: string, userId: string, sessionId?: string, metadata?: Partial<MessageMetadata>): string {
     const messageId = this.generateMessageId()
+    const resolvedUserId = userId || this.userId || ''
     const message: Message = {
       message_id: messageId,
       session_id: sessionId || this.sessionId || this.generateMessageId(),
-      user_id: userId,
+      user_id: resolvedUserId,
       type: 'user_message',
       content: {
         text,
@@ -203,14 +209,19 @@ export class AgentWebSocket {
 
   setUser(userId: string): void {
     this.userId = userId
+    console.log('[AgentWebSocket] Active user set:', userId)
   }
 
   setSession(sessionId: string): void {
     this.sessionId = sessionId
   }
 
+  clearSession(): void {
+    this.sessionId = null
+    console.log('[AgentWebSocket] Session cleared')
+  }
+
   disconnect(): void {
-    this.cleanupHeartbeat()
     if (this.ws) {
       this.ws.close(1000, 'Client disconnect')
       this.ws = null
@@ -219,58 +230,16 @@ export class AgentWebSocket {
     this.emit('connection-change', false)
   }
 
-  private startHeartbeat(): void {
-    this.cleanupHeartbeat()
-    
-    this.heartbeatInterval = window.setInterval(() => {
-      if (this.isConnected && this.ws?.readyState === WebSocket.OPEN) {
-        // Send ping
-        const pingMsg = {
-          type: 'ping',
-          timestamp: Date.now()
-        }
-        try {
-          this.ws.send(JSON.stringify(pingMsg))
-        } catch (error) {
-          console.error('Failed to send heartbeat ping:', error)
-        }
-        
-        // Set timeout for pong response
-        this.heartbeatTimeout = window.setTimeout(() => {
-          console.warn('Heartbeat timeout - no pong received')
-          if (this.ws) {
-            this.ws.close(1001, 'Heartbeat timeout')
-          }
-        }, this.heartbeatTimeoutMs)
-      }
-    }, this.heartbeatIntervalMs)
-  }
-
-  private resetHeartbeatTimeout(): void {
-    if (this.heartbeatTimeout) {
-      window.clearTimeout(this.heartbeatTimeout)
-      this.heartbeatTimeout = null
-    }
-  }
-
-  private cleanupHeartbeat(): void {
-    if (this.heartbeatInterval) {
-      window.clearInterval(this.heartbeatInterval)
-      this.heartbeatInterval = null
-    }
-    this.resetHeartbeatTimeout()
-  }
-
   private scheduleReconnect(): void {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.error('Max reconnection attempts reached')
+      console.error('[AgentWebSocket] Max reconnection attempts reached')
       return
     }
 
     this.reconnectAttempts++
     const delay = Math.min(this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1), this.maxReconnectDelay)
     
-    console.log(`Scheduling reconnect attempt ${this.reconnectAttempts} in ${delay}ms`)
+    console.log(`[AgentWebSocket] Scheduling reconnect attempt ${this.reconnectAttempts} in ${delay}ms`)
     
     setTimeout(() => {
       this.connect()

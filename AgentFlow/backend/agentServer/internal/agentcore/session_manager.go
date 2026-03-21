@@ -37,6 +37,21 @@ func (sm *SessionManager) GetOrCreateSession(userID string, sessionID string, se
 		s, ok := sm.sessions[sessionID]
 		sm.mu.RUnlock()
 		if ok {
+			if s.Type == "group" || sessionType == "group" {
+				sm.mu.Lock()
+				s.Type = "group"
+				if s.GroupInfo == nil {
+					s.GroupInfo = &GroupInfo{
+						GroupID:   s.SessionID,
+						GroupName: s.SessionID,
+						CreatorID: s.UserID,
+					}
+				}
+				s.UpdatedAt = now
+				sm.mu.Unlock()
+				return s, nil
+			}
+
 			if s.UserID != userID {
 				return nil, errors.New("session user mismatch")
 			}
