@@ -7,8 +7,14 @@ LOG_FILE="api_server.log"
 
 echo "🔍 Checking for processes on port $PORT..."
 
-# Find PID of process using the port
-PID=$(lsof -t -i:$PORT)
+PID=""
+if command -v lsof >/dev/null 2>&1; then
+    PID=$(lsof -t -i:"$PORT" 2>/dev/null || true)
+elif command -v ss >/dev/null 2>&1; then
+    PID=$(ss -lntp 2>/dev/null | awk -v p=":$PORT" '$0 ~ p && $0 ~ /LISTEN/ { print $NF }' | sed -n 's/.*pid=\([0-9][0-9]*\).*/\1/p' | head -n 1)
+elif command -v fuser >/dev/null 2>&1; then
+    PID=$(fuser -n tcp "$PORT" 2>/dev/null | awk '{print $1}' | head -n 1)
+fi
 
 if [ -n "$PID" ]; then
     echo "⚠️ Found process $PID using port $PORT. Terminating..."
