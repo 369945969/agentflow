@@ -1,153 +1,101 @@
 package main
 
 import (
-	"bufio"
-	"bytes"
-	"encoding/json"
+	"context"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
-	"strings"
+	"strconv"
+	"time"
 
 	"github.com/gorilla/websocket"
+
+	"wsServer/internal/agentcore"
+	"wsServer/internal/config"
+	"wsServer/internal/protocol"
+	"wsServer/internal/ws"
 )
 
 var (
 	upgrader = websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
-			return true // Allow all origins for development
+			return true
 		},
 	}
-	openCodeURL = "http://localhost:3001/api/sse/chat"
 )
 
-type WSMessage struct {
-	UserID  string `json:"userId"`
-	ModelID string `json:"modelId"`
-	Message string `json:"message"`
-}
-
-type SSEData struct {
-	Content string `json:"content"`
-}
-
 func main() {
-	http.HandleFunc("/ws", handleWebSocket)
-	port := "3002"
-	fmt.Printf("🚀 WebSocket Server starting on ws://localhost:%s/ws\n", port)
-	log.Fatal(http.ListenAndServe(":"+port, nil))
-}
-
-func handleWebSocket(w http.ResponseWriter, r *http.Request) {
-	conn, err := upgrader.Upgrade(w, r, nil)
+	cfg, err := config.Load("")
 	if err != nil {
-		log.Printf("Upgrade error: %v", err)
-		return
+		log.Fatal(err)
 	}
-	defer conn.Close()
 
-	log.Println("🔌 Client connected")
-
-	for {
-		_, message, err := conn.ReadMessage()
-		if err != nil {
-			log.Printf("Read error: %v", err)
-			break
+	agents := make([]agentcore.SubAgentConfig, 0, len(cfg.Agents))
+	for _, a := range cfg.Agents {
+		caps := make([]agentcore.AgentCapability, 0, len(a.Capabilities))
+		for _, c := range a.Capabilities {
+			caps = append(caps, agentcore.AgentCapability{
+				SkillID:     c.SkillID,
+				SkillName:   c.SkillName,
+				Description: c.Description,
+				Keywords:    c.Keywords,
+				InputSchema: c.InputSchema,
+				Priority:    c.Priority,
+			})
 		}
-
-		var wsMsg WSMessage
-		if err := json.Unmarshal(message, &wsMsg); err != nil {
-			sendError(conn, "Invalid JSON format")
-			continue
-		}
-
-		if wsMsg.Message == "" {
-			sendError(conn, "Message is required")
-			continue
-		}
-
-		log.Printf("[%s] -> OpenCode: %s", wsMsg.UserID, wsMsg.Message)
-
-		// Call OpenCode SSE
-		go forwardToOpenCode(conn, wsMsg)
-	}
-}
-
-func forwardToOpenCode(conn *websocket.Conn, msg WSMessage) {
-	payload, _ := json.Marshal(map[string]string{"message": msg.Message})
-	req, err := http.NewRequest("POST", openCodeURL, bytes.NewBuffer(payload))
-	if err != nil {
-		sendError(conn, "Failed to create request")
-		return
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	if msg.UserID != "" {
-		req.Header.Set("X-User-ID", msg.UserID)
-	}
-	if msg.ModelID != "" {
-		req.Header.Set("X-Model-ID", msg.ModelID)
+		agents = append(agents, agentcore.SubAgentConfig{
+			AgentID:      a.AgentID,
+			Name:         a.Name,
+			Endpoint:     a.Endpoint,
+			Capabilities: caps,
+			ExecutionConfig: agentcore.AgentExecutionConfig{
+				ResultMarkers: agentcore.ResultMarkers{
+					FinalPrefix:    a.ExecutionConfig.ResultMarkers.FinalPrefix,
+					ThinkingPrefix: a.ExecutionConfig.ResultMarkers.ThinkingPrefix,
+					ErrorPrefix:    a.ExecutionConfig.ResultMarkers.ErrorPrefix,
+				},
+				Streaming: agentcore.StreamingConfig{
+					Enabled:       a.ExecutionConfig.Streaming.Enabled,
+					BufferSize:    a.ExecutionConfig.Streaming.BufferSize,
+					FlushInterval: a.ExecutionConfig.Streaming.FlushInterval,
+				},
+				TimeoutMs:     a.ExecutionConfig.TimeoutMs,
+				MaxConcurrent: a.ExecutionConfig.MaxConcurrent,
+			},
+			Health: agentcore.HealthStatus{
+				CurrentLoad:     a.Health.CurrentLoad,
+				MaxCapacity:     a.Health.MaxCapacity,
+				AvgLatencyMs:    a.Health.AvgLatencyMs,
+				LastHealthCheck: a.Health.LastHealthCheck,
+				IsHealthy:       a.Health.IsHealthy,
+			},
+		})
 	}
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		sendError(conn, "Failed to connect to OpenCode: "+err.Error())
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		sendError(conn, fmt.Sprintf("OpenCode error (%d): %s", resp.StatusCode, string(body)))
-		return
-	}
-
-	reader := bufio.NewReader(resp.Body)
-	for {
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			log.Printf("Stream read error: %v", err)
-			break
-		}
-
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-
-		if strings.HasPrefix(line, "data: ") {
-			data := strings.TrimPrefix(line, "data: ")
-			if data == "[DONE]" {
-				conn.WriteJSON(map[string]string{"type": "done"})
-				break
-			}
-
-			// Forward data to client
-			var sseData interface{}
-			if err := json.Unmarshal([]byte(data), &sseData); err == nil {
-				conn.WriteJSON(map[string]interface{}{
-					"type": "delta",
-					"raw":  sseData,
-				})
-			} else {
-				conn.WriteJSON(map[string]string{
-					"type": "raw",
-					"data": data,
-				})
-			}
-		}
-	}
-	log.Println("✅ Stream finished")
-}
-
-func sendError(conn *websocket.Conn, errMsg string) {
-	conn.WriteJSON(map[string]string{
-		"type":  "error",
-		"error": errMsg,
+	core := agentcore.NewAgentCore(agents, cfg.Backend.ModelsAPIURL, nil)
+	core.SetDefaultUserConfig(agentcore.UserInteractionConfig{
+		StreamMode:     cfg.DefaultUserConfig.StreamMode,
+		EnableThinking: cfg.DefaultUserConfig.EnableThinking,
+		TimeoutMs:      cfg.DefaultUserConfig.TimeoutMs,
+		MaxRetries:     cfg.DefaultUserConfig.MaxRetries,
+		ReturnStrategy: agentcore.ReturnStrategy{
+			Type:              cfg.DefaultUserConfig.ReturnStrategy.Type,
+			FinalResultMarker: cfg.DefaultUserConfig.ReturnStrategy.FinalResultMarker,
+			ChunkSize:         cfg.DefaultUserConfig.ReturnStrategy.ChunkSize,
+			DebounceMs:        cfg.DefaultUserConfig.ReturnStrategy.DebounceMs,
+		},
 	})
+	core.SetLogBasePath(cfg.Log.Dir)
+
+	gateway := ws.NewGateway(upgrader, func(ctx context.Context, connID string, msg protocol.Message) {
+		core.HandleMessage(ctx, connID, msg)
+	},
+		ws.WithHeartbeat(time.Duration(cfg.WebSocket.PingIntervalSec)*time.Second, time.Duration(cfg.WebSocket.PongWaitSec)*time.Second),
+		ws.WithSendQueueSize(cfg.WebSocket.SendQueueSize),
+	)
+	core.SetEmitter(gateway)
+	http.Handle("/ws", gateway)
+	port := strconv.Itoa(cfg.Server.Port)
+	fmt.Printf("WebSocket Server starting on ws://localhost:%s/ws\n", port)
+	log.Fatal(http.ListenAndServe(":"+port, nil))
 }

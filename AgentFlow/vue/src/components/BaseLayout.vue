@@ -11,7 +11,8 @@ const isSidebarCollapsed = ref(false)
 // Frequently used items (Top section)
 const primaryNavItems = [
   { name: '系统监控', icon: 'lucide:layout-dashboard', path: '/' },
-  { name: '对话界面', icon: 'lucide:message-square', path: '/chat-interface' },
+  { name: '单人对话', icon: 'lucide:user', path: '/single-person-chat' },
+  { name: '多人对话', icon: 'lucide:message-square', path: '/multi-person-chat' },
   { name: '编排画布', icon: 'lucide:workflow', path: '/orchestration-editor' },
   { name: 'Agents', icon: 'lucide:bot', path: '/agent-management' },
   { name: '定时任务', icon: 'lucide:calendar', path: '/schedule-tasks' },
@@ -149,17 +150,6 @@ const toggleSidebar = () => {
                 {{ item.name }}
               </div>
             </router-link>
-
-            <!-- Settings item -->
-            <div class="hover:bg-white/5 flex items-center gap-3 rounded-xl cursor-pointer group relative w-full" :class="isSidebarCollapsed ? 'justify-center' : ''" style="padding: 0.75rem 1rem;">
-              <div class="flex justify-center items-center w-5 h-5 shrink-0">
-                <iconify-icon style="color: color-mix(in oklab, #fff 70%, transparent);" icon="lucide:settings" class="text-base"></iconify-icon>
-              </div>
-              <span v-if="!isSidebarCollapsed" style="color: color-mix(in oklab, #fff 70%, transparent);" class="text-xs whitespace-nowrap">系统设置</span>
-              <div v-if="isSidebarCollapsed" class="absolute left-full ml-4 px-2 py-1 bg-[#1A2536] text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50 whitespace-nowrap border border-white/10 shadow-xl">
-                系统设置
-              </div>
-            </div>
           </div>
 
         </div>
