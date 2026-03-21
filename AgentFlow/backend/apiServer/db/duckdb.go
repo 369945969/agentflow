@@ -82,6 +82,24 @@ func InitDB() {
 	migrateGroupTable("simplified_output", "BOOLEAN", "FALSE")
 	migrateGroupTable("custom_rule", "TEXT", "''")
 
+	// Migrations for agents table
+	migrateTable := func(tableName string, columnName string, columnType string, defaultValue string) {
+		_, err := DB.Exec(fmt.Sprintf("SELECT %s FROM %s LIMIT 1", columnName, tableName))
+		if err != nil {
+			log.Printf("Migration: Adding %s column to %s table...", columnName, tableName)
+			_, err = DB.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s DEFAULT %s", tableName, columnName, columnType, defaultValue))
+			if err != nil {
+				log.Printf("Failed to migrate %s table (%s): %v", tableName, columnName, err)
+			} else {
+				log.Printf("✅ Migration successful: %s column added to %s", columnName, tableName)
+			}
+		}
+	}
+
+	// Add thinking_enabled and simplified_output columns to agents table
+	migrateTable("agents", "thinking_enabled", "BOOLEAN", "TRUE") // Default to true
+	migrateTable("agents", "simplified_output", "BOOLEAN", "FALSE")
+
 	// Ensure default group exists and contains all agents
 	if err := ensureDefaultGroup(); err != nil {
 		log.Printf("Failed to ensure default group: %v", err)
