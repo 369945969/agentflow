@@ -6,8 +6,9 @@ export DEEPSEEK_API_KEY=sk-6696ebd5e41f4fd9a1a218b57a85ad6b
 
 set -euo pipefail
 
-BASE_URL="http://localhost:3001"
-BACKEND_API="http://localhost:3000/api/models/"
+BASE_URL="${BASE_URL:-http://localhost:3001}"
+BACKEND_API="${BACKEND_API:-http://localhost:3000/api/models/}"
+SKIP_BACKEND="${SKIP_BACKEND:-}"
 
 log_step() {
     echo ""
@@ -43,19 +44,35 @@ if ! command -v jq &> /dev/null; then
 fi
 
 # 2. 动态获取模型 ID (通过 Go 后端 API)
-log_step "读取后端模型列表"
-log_kv "GET" "$BACKEND_API"
-MODELS_JSON=$(curl -s --compressed "$BACKEND_API")
+if [ -n "$SKIP_BACKEND" ]; then
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "🧪 跳过后端模型列表 (SKIP_BACKEND=1)"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    MODELS_JSON="[]"
+else
+    log_step "读取后端模型列表"
+    log_kv "GET" "$BACKEND_API"
+    if ! MODELS_JSON=$(curl -fsS --compressed --max-time 3 "$BACKEND_API"); then
+        echo "❌ 错误: 无法访问后端模型列表。"
+        echo "   - BACKEND_API: $BACKEND_API"
+        echo "   - 解决方案:"
+        echo "     1) 确保 apiServer 已在该机器启动并监听 3000"
+        echo "     2) 或将 BACKEND_API 指向实际后端地址"
+        echo "     3) 或设置 SKIP_BACKEND=1 只验证 OpenCode"
+        exit 1
+    fi
 
-if [ -z "$MODELS_JSON" ] || [ "$MODELS_JSON" == "[]" ]; then
-    echo "❌ 错误: 后端返回的模型列表为空。请确保 Go 后端正在运行且已配置模型。"
-    exit 1
+    if [ -z "$MODELS_JSON" ] || [ "$MODELS_JSON" == "[]" ]; then
+        echo "❌ 错误: 后端返回的模型列表为空。请确保 Go 后端正在运行且已配置模型。"
+        exit 1
+    fi
+    preview_json "后端 models 列表" "$MODELS_JSON"
 fi
-preview_json "后端 models 列表" "$MODELS_JSON"
 
-DEFAULT_ROW=$(echo "$MODELS_JSON" | jq -c 'map(select(.is_default == true))[0] // .[0]')
-DEFAULT_MODEL_ID=$(echo "$DEFAULT_ROW" | jq -r '.id')
-DEFAULT_MODEL_NAME=$(echo "$DEFAULT_ROW" | jq -r '.name')
+DEFAULT_ROW=$(echo "$MODELS_JSON" | jq -c 'map(select(.is_default == true))[0] // .[0] // empty')
+DEFAULT_MODEL_ID=$(echo "$DEFAULT_ROW" | jq -r '.id // empty')
+DEFAULT_MODEL_NAME=$(echo "$DEFAULT_ROW" | jq -r '.name // empty')
 DEFAULT_MODEL_BASE_URL=$(echo "$DEFAULT_ROW" | jq -r '.base_url // empty')
 DEFAULT_MODEL_MODEL_NAME=$(echo "$DEFAULT_ROW" | jq -r '.model_name // empty')
 DEFAULT_MODEL_PROVIDER_LABEL=$(echo "$DEFAULT_ROW" | jq -r '.provider // empty')
@@ -67,15 +84,17 @@ OTHER_MODEL_BASE_URL=$(echo "$OTHER_ROW" | jq -r '.base_url // empty')
 OTHER_MODEL_MODEL_NAME=$(echo "$OTHER_ROW" | jq -r '.model_name // empty')
 OTHER_MODEL_PROVIDER_LABEL=$(echo "$OTHER_ROW" | jq -r '.provider // empty')
 
-log_step "解析后端默认模型 (DuckDB 记录)"
-log_kv "duckdb_model_id" "$DEFAULT_MODEL_ID"
-log_kv "name" "$DEFAULT_MODEL_NAME"
-log_kv "provider" "$DEFAULT_MODEL_PROVIDER_LABEL"
-log_kv "base_url" "$DEFAULT_MODEL_BASE_URL"
-log_kv "model_name" "$DEFAULT_MODEL_MODEL_NAME"
+if [ -z "$SKIP_BACKEND" ]; then
+    log_step "解析后端默认模型 (DuckDB 记录)"
+    log_kv "duckdb_model_id" "$DEFAULT_MODEL_ID"
+    log_kv "name" "$DEFAULT_MODEL_NAME"
+    log_kv "provider" "$DEFAULT_MODEL_PROVIDER_LABEL"
+    log_kv "base_url" "$DEFAULT_MODEL_BASE_URL"
+    log_kv "model_name" "$DEFAULT_MODEL_MODEL_NAME"
 
-echo "   ✅ 默认模型: $DEFAULT_MODEL_NAME ($DEFAULT_MODEL_ID)"
-[ -n "$OTHER_MODEL_ID" ] && [ "$OTHER_MODEL_ID" != "null" ] && echo "   ✅ 备选模型: $OTHER_MODEL_NAME ($OTHER_MODEL_ID)"
+    echo "   ✅ 默认模型: $DEFAULT_MODEL_NAME ($DEFAULT_MODEL_ID)"
+    [ -n "$OTHER_MODEL_ID" ] && [ "$OTHER_MODEL_ID" != "null" ] && echo "   ✅ 备选模型: $OTHER_MODEL_NAME ($OTHER_MODEL_ID)"
+fi
 
 # 3. 检查 OpenCode 服务状态
 log_step "检查 OpenCode 服务健康"
