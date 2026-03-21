@@ -26,12 +26,14 @@ type Group struct {
 }
 
 type Agent struct {
-	ID           string    `json:"id" db:"id"`
-	Name         string    `json:"name" db:"name"`
-	Description  string    `json:"description" db:"description"`
-	Model        string    `json:"model" db:"model"`
-	SystemPrompt string    `json:"system_prompt" db:"system_prompt"`
-	CreatedAt    time.Time `json:"created_at" db:"created_at"`
+	ID               string    `json:"id" db:"id"`
+	Name             string    `json:"name" db:"name"`
+	Description      string    `json:"description" db:"description"`
+	Model            string    `json:"model" db:"model"`
+	SystemPrompt     string    `json:"system_prompt" db:"system_prompt"`
+	ThinkingEnabled  bool      `json:"thinking_enabled,omitempty" db:"thinking_enabled"`
+	SimplifiedOutput bool      `json:"simplified_output,omitempty" db:"simplified_output"`
+	CreatedAt        time.Time `json:"created_at" db:"created_at"`
 }
 
 type Edge struct {
