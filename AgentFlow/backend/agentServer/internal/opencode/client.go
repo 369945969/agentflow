@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -456,15 +457,27 @@ func (c *Client) readEvents(ctx context.Context, cancel context.CancelFunc, out 
 			if assistantMsgID != "" && mid != assistantMsgID {
 				continue
 			}
+			prev := buf.String()
+			delta := text
+			if prev != "" && strings.HasPrefix(text, prev) {
+				delta = text[len(prev):]
+				buf.Reset()
+				buf.WriteString(text)
+			} else {
+				buf.WriteString(text)
+			}
+			if delta == "" {
+				continue
+			}
+			log.Printf("[opencode] event message.part.updated session_id=%s source_message_id=%s assistant_message_id=%s chunk_len=%d", sessionID, src.MessageID, mid, len(delta))
 			gotText = true
-			buf.WriteString(text)
 			out <- protocol.ServerMessage{
 				Type:      "stream_chunk",
 				MessageID: src.MessageID,
 				SessionID: src.SessionID,
 				Timestamp: time.Now().UnixMilli(),
 				Payload: protocol.StreamChunkPayload{
-					Content:    text,
+					Content:    delta,
 					IsThinking: false,
 					IsFinal:    false,
 					Metadata: map[string]interface{}{
@@ -506,6 +519,7 @@ func (c *Client) readEvents(ctx context.Context, cancel context.CancelFunc, out 
 			if !gotText {
 				continue
 			}
+			log.Printf("[opencode] event session.idle session_id=%s source_message_id=%s final_len=%d", sessionID, src.MessageID, buf.Len())
 			out <- protocol.ServerMessage{
 				Type:      "stream_end",
 				MessageID: src.MessageID,

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, nextTick, onBeforeUnmount, onMounted, watch } from 'vue'
 import BaseLayout from '../components/BaseLayout.vue'
 import { API_BASE_URL, WEBSOCKET_URL } from '../config/api'
 import { getWebSocketInstance, type ServerMessage } from '../api/websocket'
@@ -15,9 +15,104 @@ const messages = ref<any[]>([])
 const inputText = ref('')
 const isConnected = ref(false)
 
+const messageGroups = computed(() => {
+  const groups: any[] = []
+  const assistantGroups = new Map<string, any>()
+
+  for (const message of messages.value) {
+    const baseId = typeof message.streamKey === 'string'
+      ? message.streamKey.split(':')[0]
+      : message.id
+
+    if (message.type === 'agent' && !message.isError) {
+      let group = assistantGroups.get(baseId)
+      if (!group) {
+        group = {
+          id: `assistant:${baseId}`,
+          kind: 'assistant',
+          thinking: null,
+          reply: null
+        }
+        assistantGroups.set(baseId, group)
+        groups.push(group)
+      }
+
+      if (message.isThinking) {
+        group.thinking = message
+      } else {
+        group.reply = message
+      }
+      continue
+    }
+
+    groups.push({
+      id: message.id,
+      kind: 'single',
+      message
+    })
+  }
+
+  return groups
+})
+
 // ========== WebSocket ==========
 const ws = getWebSocketInstance()
 const wsInitialized = ref(false)
+const messageListRef = ref<HTMLElement | null>(null)
+const thinkingViewports = new Map<string, HTMLElement>()
+const thinkingExpanded = ref<Record<string, boolean>>({})
+const shouldStickToBottom = ref(true)
+
+const trimTrailingBlankLines = (text: string) => text.replace(/\n{3,}$/g, '\n').replace(/\s+$/g, '')
+const trimLeadingBlankLines = (text: string) => text.replace(/^\s*\n+/g, '')
+
+const scrollMessagesToBottom = (smooth = false) => {
+  nextTick(() => {
+    const el = messageListRef.value
+    if (!el) return
+    el.scrollTo({
+      top: el.scrollHeight,
+      behavior: smooth ? 'smooth' : 'auto'
+    })
+  })
+}
+
+const handleMessageListScroll = () => {
+  const el = messageListRef.value
+  if (!el) return
+  const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+  shouldStickToBottom.value = distanceFromBottom < 80
+}
+
+const isThinkingExpanded = (streamKey: string) => Boolean(thinkingExpanded.value[streamKey])
+
+const toggleThinkingExpanded = (streamKey: string) => {
+  thinkingExpanded.value = {
+    ...thinkingExpanded.value,
+    [streamKey]: !thinkingExpanded.value[streamKey]
+  }
+  scrollThinkingViewport(streamKey)
+}
+
+const setThinkingViewport = (streamKey: string, el: any) => {
+  if (el instanceof HTMLElement) {
+    thinkingViewports.set(streamKey, el)
+    el.scrollTop = el.scrollHeight
+    return
+  }
+  thinkingViewports.delete(streamKey)
+}
+
+const scrollThinkingViewport = (streamKey: string) => {
+  nextTick(() => {
+    const el = thinkingViewports.get(streamKey)
+    if (!el) return
+    el.scrollTop = el.scrollHeight
+  })
+  if (shouldStickToBottom.value) {
+    scrollMessagesToBottom()
+  }
+}
 
 const upsertAgentMessage = (message: ServerMessage) => {
   const payload = message.payload
@@ -29,31 +124,60 @@ const upsertAgentMessage = (message: ServerMessage) => {
 
   if (message.type === 'stream_chunk') {
     if (existing) {
-      existing.content += payload.content || ''
       existing.timestamp = message.timestamp || Date.now()
       existing.isFinal = false
+      existing.isStreaming = true
+      if (isThinking) {
+        existing.content += payload.content || ''
+        existing.content = trimLeadingBlankLines(existing.content)
+        scrollThinkingViewport(streamKey)
+      } else {
+        existing.content += payload.content || ''
+        existing.content = trimLeadingBlankLines(existing.content)
+        if (shouldStickToBottom.value) {
+          scrollMessagesToBottom()
+        }
+      }
       return
     }
 
-    messages.value.push({
+    const nextMessage = {
       id: streamKey,
       streamKey,
       type: 'agent',
-      content: payload.content || '',
+      content: isThinking ? '' : trimLeadingBlankLines(payload.content || ''),
       isThinking,
       isFinal: false,
+      isStreaming: true,
       timestamp: message.timestamp || Date.now()
-    })
+    }
+    messages.value.push(nextMessage)
+    if (isThinking) {
+      nextMessage.content = trimLeadingBlankLines(payload.content || '')
+      scrollThinkingViewport(streamKey)
+    } else if (shouldStickToBottom.value) {
+      scrollMessagesToBottom()
+    }
     return
   }
 
   const answerKey = `${message.message_id || 'unknown'}:answer`
+  const thinkingKey = `${message.message_id || 'unknown'}:thinking`
+  const thinkingMessage = messages.value.find((item: any) => item.type === 'agent' && item.streamKey === thinkingKey)
+  if (thinkingMessage) {
+    thinkingMessage.isStreaming = false
+    scrollThinkingViewport(thinkingKey)
+  }
   const finalExisting = messages.value.find((item: any) => item.type === 'agent' && item.streamKey === answerKey)
   if (finalExisting) {
-    finalExisting.content = payload.content || finalExisting.content
+    finalExisting.content = trimTrailingBlankLines(trimLeadingBlankLines(payload.content || finalExisting.content || ''))
     finalExisting.timestamp = message.timestamp || Date.now()
     finalExisting.isThinking = false
     finalExisting.isFinal = true
+    finalExisting.isStreaming = false
+    if (shouldStickToBottom.value) {
+      scrollMessagesToBottom(true)
+    }
     return
   }
 
@@ -61,11 +185,15 @@ const upsertAgentMessage = (message: ServerMessage) => {
     id: answerKey,
     streamKey: answerKey,
     type: 'agent',
-    content: payload.content || '',
+    content: trimTrailingBlankLines(trimLeadingBlankLines(payload.content || '')),
     isThinking: false,
     isFinal: true,
+    isStreaming: false,
     timestamp: message.timestamp || Date.now()
   })
+  if (shouldStickToBottom.value) {
+    scrollMessagesToBottom(true)
+  }
 }
 
 // Update agent settings in database
@@ -133,6 +261,9 @@ const setupWebSocket = () => {
         isError: true,
         timestamp: message.timestamp || Date.now()
       })
+      if (shouldStickToBottom.value) {
+        scrollMessagesToBottom(true)
+      }
     }
   })
   
@@ -159,6 +290,8 @@ const sendMessage = () => {
   }
   
   messages.value.push(userMessage)
+  shouldStickToBottom.value = true
+  scrollMessagesToBottom(true)
   
   // Send via WebSocket
   const messageId = ws.sendText(inputText.value.trim(), selectedUserId.value)
@@ -319,6 +452,8 @@ watch(selectedUserId, () => {
     
     // Clear previous messages when switching users
     messages.value = []
+    thinkingExpanded.value = {}
+    shouldStickToBottom.value = true
   }
   
   // Ensure WebSocket is connected and set up
@@ -335,6 +470,10 @@ onMounted(() => {
   fetchModels()
   fetchUsers()
   setupWebSocket()
+})
+
+onBeforeUnmount(() => {
+  thinkingViewports.clear()
 })
 </script>
 
@@ -426,23 +565,104 @@ onMounted(() => {
             </div>
           </div>
         </div>
-        <div class="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
-          <div v-if="messages.length === 0" class="flex flex-col items-center justify-center h-full text-white/30 text-sm">
+        <div
+          ref="messageListRef"
+          class="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar"
+          @scroll="handleMessageListScroll"
+        >
+          <div v-if="messageGroups.length === 0" class="flex flex-col items-center justify-center h-full text-white/30 text-sm">
             <iconify-icon icon="lucide:user" class="text-4xl mb-4"></iconify-icon>
             开始你的单人对话...
           </div>
           <div v-else class="space-y-6">
-            <div v-for="message in messages" :key="message.id" class="flex" :class="message.type === 'user' ? 'justify-end' : 'justify-start'">
-              <div class="max-w-[70%] rounded-2xl p-4" :class="message.type === 'user' ? 'bg-[#3B9BFF] text-white' : 'bg-white/10 text-white/90'">
-                <div class="whitespace-pre-wrap">{{ message.content }}</div>
-                <div class="text-xs mt-2 opacity-60">{{ new Date(message.timestamp).toLocaleTimeString() }}</div>
+            <div
+              v-for="group in messageGroups"
+              :key="group.id"
+              class="flex"
+              :class="group.kind === 'single' && group.message.type === 'user' ? 'justify-end' : 'justify-start'"
+            >
+              <div v-if="group.kind === 'assistant'" class="w-full max-w-[760px] space-y-3">
+                <div v-if="group.thinking" class="w-full text-amber-50">
+                  <div class="rounded-2xl border border-amber-200/12 bg-amber-500/10 shadow-[0_12px_32px_rgba(251,191,36,0.08)]">
+                    <button
+                      type="button"
+                      class="flex w-full items-center justify-between gap-3 px-3 py-2 text-left"
+                      @click="toggleThinkingExpanded(group.thinking.streamKey)"
+                    >
+                      <div class="min-w-0 flex items-center gap-2">
+                        <span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-amber-300/14 text-amber-200">
+                          <iconify-icon icon="lucide:brain-circuit" class="text-sm"></iconify-icon>
+                        </span>
+                        <div class="min-w-0">
+                          <div class="flex items-center gap-2">
+                            <div class="text-[11px] font-semibold uppercase tracking-[0.22em] text-amber-200/90">Thinking</div>
+                            <span v-if="group.thinking.isStreaming" class="h-2 w-2 rounded-full bg-amber-200/80 animate-pulse"></span>
+                          </div>
+                          <div class="text-xs text-amber-50/60 break-words">
+                            {{ group.thinking.isStreaming ? '推理中（实时）' : '推理完成' }}
+                          </div>
+                        </div>
+                      </div>
+                      <div class="ml-3 flex shrink-0 items-center gap-2 text-amber-100/70">
+                        <span class="text-[11px]">{{ isThinkingExpanded(group.thinking.streamKey) ? '收起' : '展开' }}</span>
+                        <iconify-icon
+                          icon="lucide:chevron-down"
+                          class="text-base transition-transform duration-200"
+                          :class="isThinkingExpanded(group.thinking.streamKey) ? 'rotate-180' : ''"
+                        ></iconify-icon>
+                      </div>
+                    </button>
+                    <div
+                      :ref="el => setThinkingViewport(group.thinking.streamKey, el)"
+                      class="thinking-viewport w-full whitespace-pre-wrap break-words px-3 pb-3 text-sm leading-7 text-amber-50/88"
+                      :class="isThinkingExpanded(group.thinking.streamKey) ? 'thinking-viewport-expanded' : 'thinking-viewport-collapsed'"
+                    >{{ group.thinking.content || (group.thinking.isStreaming ? '思考中…' : '') }}</div>
+                  </div>
+                </div>
+
+                <div
+                  v-if="group.reply"
+                  class="rounded-2xl p-4 border bg-white/10 text-white/90 border-white/10"
+                >
+                  <div class="mb-2 inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-[11px] uppercase tracking-[0.18em] bg-emerald-300/15 text-emerald-200">
+                    Reply
+                  </div>
+                  <div class="whitespace-pre-wrap">{{ group.reply.content }}</div>
+                  <div
+                    v-if="group.reply.isStreaming"
+                    class="mt-3 inline-flex items-center gap-2 text-xs opacity-70"
+                  >
+                    <span class="h-2 w-2 rounded-full bg-current animate-pulse"></span>
+                    <span>生成中...</span>
+                  </div>
+                  <div class="text-xs mt-2 opacity-60">{{ new Date(group.reply.timestamp).toLocaleTimeString() }}</div>
+                </div>
+              </div>
+
+              <div
+                v-else-if="group.message.type === 'user'"
+                class="max-w-[760px] rounded-2xl p-4 border bg-[#3B9BFF] text-white border-[#3B9BFF]"
+              >
+                <div class="whitespace-pre-wrap">{{ group.message.content }}</div>
+                <div class="text-xs mt-2 opacity-60">{{ new Date(group.message.timestamp).toLocaleTimeString() }}</div>
+              </div>
+
+              <div
+                v-else
+                class="max-w-[760px] rounded-2xl p-4 border bg-red-500/10 text-red-50 border-red-400/30"
+              >
+                <div class="mb-2 inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-[11px] uppercase tracking-[0.18em] bg-red-400/15 text-red-200">
+                  Error
+                </div>
+                <div class="whitespace-pre-wrap">{{ group.message.content }}</div>
+                <div class="text-xs mt-2 opacity-60">{{ new Date(group.message.timestamp).toLocaleTimeString() }}</div>
               </div>
             </div>
           </div>
         </div>
         <div class="p-6 border-t border-white/10 bg-white/5 backdrop-blur-md shrink-0">
           <div class="flex gap-4">
-            <textarea v-model="inputText" @keydown="handleTextareaKeydown" placeholder="输入消息..." rows="1" class="flex-1 bg-white/5 border border-white/10 rounded-xl p-3 text-sm text-white/90 outline-none focus:border-[#3B9BFF]/50 resize-none"></textarea>
+            <textarea v-model="inputText" @keydown="handleTextareaKeydown" placeholder="输入消息..." rows="1" class="chat-input flex-1 bg-white/5 border border-white/10 rounded-xl p-3 text-sm text-white/90 outline-none focus:border-[#3B9BFF]/50 resize-none overflow-y-auto max-h-32"></textarea>
             <button @click="sendMessage" class="w-12 h-12 bg-[#3B9BFF] rounded-xl flex items-center justify-center text-white shadow-[0_0_20px_rgba(59,155,255,0.3)]"><iconify-icon icon="lucide:send" class="text-xl"></iconify-icon></button>
           </div>
         </div>
@@ -503,5 +723,43 @@ onMounted(() => {
 }
 .custom-scrollbar::-webkit-scrollbar { width: 4px; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(59, 155, 255, 0.2); border-radius: 10px; }
-textarea { scrollbar-width: none; }
+.chat-input {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(59, 155, 255, 0.35) rgba(255, 255, 255, 0.06);
+}
+.chat-input::-webkit-scrollbar {
+  width: 6px;
+}
+.chat-input::-webkit-scrollbar-thumb {
+  background: rgba(59, 155, 255, 0.35);
+  border-radius: 9999px;
+}
+.chat-input::-webkit-scrollbar-thumb:hover {
+  background: rgba(95, 180, 255, 0.5);
+}
+.chat-input::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 9999px;
+}
+.thinking-viewport {
+  overflow-y: auto;
+  padding-right: 0.25rem;
+  transition: max-height 180ms ease;
+}
+.thinking-viewport-collapsed {
+  max-height: 6.5em;
+  overflow-y: hidden;
+  mask-image: linear-gradient(to bottom, black 62%, transparent 100%);
+}
+.thinking-viewport-expanded {
+  max-height: 18em;
+  mask-image: none;
+}
+.thinking-viewport::-webkit-scrollbar {
+  width: 4px;
+}
+.thinking-viewport::-webkit-scrollbar-thumb {
+  background: rgba(251, 191, 36, 0.28);
+  border-radius: 9999px;
+}
 </style>

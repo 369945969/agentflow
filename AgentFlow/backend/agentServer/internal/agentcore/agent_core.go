@@ -208,7 +208,7 @@ func (ac *AgentCore) Stream(ctx context.Context, execCtx ExecutionContext) {
 		summaryCtx.EffectiveConfig.EnableThinking = false
 		summaryCtx.SystemPrompt = buildSingleSystemPrompt(execCtx.UserProfile.SystemPrompt, false)
 
-		summaryFinal, err := ac.streamOnce(ctx, summaryCtx, streamSendFinalOnly, "FINAL", true)
+		summaryFinal, err := ac.streamOnce(ctx, summaryCtx, streamSendFinalOnly, "SUMMARY", true)
 		if err != nil {
 			log.Printf("[agentcore] simplified summary error conn_id=%s message_id=%s err=%v", execCtx.ConnectionID, execCtx.Message.MessageID, err)
 			_ = ac.logPersistence.AppendLog(execCtx.UserProfile.UserID, execCtx.Session.SessionID, "ERROR", err.Error())
