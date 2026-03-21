@@ -371,6 +371,7 @@ func (c *Client) readEvents(ctx context.Context, cancel context.CancelFunc, out 
 		cancel()
 		return
 	}
+	req.Header.Set("Accept", "text/event-stream")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -409,6 +410,8 @@ func (c *Client) readEvents(ctx context.Context, cancel context.CancelFunc, out 
 	reader := bufio.NewReader(resp.Body)
 	assistantMsgID := ""
 	gotText := false
+	currentEventType := ""
+	var dataBuf bytes.Buffer
 
 	for {
 		select {
@@ -421,142 +424,244 @@ func (c *Client) readEvents(ctx context.Context, cancel context.CancelFunc, out 
 		if err != nil {
 			return
 		}
-		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, "data:") {
-			continue
-		}
+		line = strings.TrimRight(line, "\r\n")
+		if line == "" {
+			if dataBuf.Len() == 0 {
+				currentEventType = ""
+				continue
+			}
 
-		jsonStr := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-		if jsonStr == "" {
-			continue
-		}
+			jsonStr := strings.TrimSpace(dataBuf.String())
+			dataBuf.Reset()
 
-		var raw map[string]interface{}
-		if err := json.Unmarshal([]byte(jsonStr), &raw); err != nil {
-			continue
-		}
+			if jsonStr == "" {
+				currentEventType = ""
+				continue
+			}
 
-		evType, _ := raw["type"].(string)
-		switch evType {
-		case "message.updated":
-			sid := getString(raw, "properties", "info", "sessionID")
-			role := getString(raw, "properties", "info", "role")
-			if sid == sessionID && role == "assistant" {
-				assistantMsgID = getString(raw, "properties", "info", "id")
-			}
-		case "message.part.updated":
-			sid := getString(raw, "properties", "part", "sessionID")
-			if sid != sessionID {
+			var raw map[string]interface{}
+			if err := json.Unmarshal([]byte(jsonStr), &raw); err != nil {
+				currentEventType = ""
 				continue
 			}
-			mid := getString(raw, "properties", "part", "messageID")
-			ptype := getString(raw, "properties", "part", "type")
-			text := getString(raw, "properties", "part", "text")
-			if text == "" {
-				text = getString(raw, "properties", "part", "reasoning")
+
+			evType := currentEventType
+			currentEventType = ""
+			if t, _ := raw["type"].(string); t != "" {
+				evType = t
 			}
-			delta := firstNonEmpty(
-				getStringFlexible(raw, "properties", "delta"),
-				getStringFlexible(raw, "properties", "part", "delta"),
-				getStringFlexible(raw, "properties", "part", "text_delta"),
-				getStringFlexible(raw, "properties", "part", "reasoning_delta"),
-			)
-			if ptype != "text" && ptype != "reasoning" {
-				continue
-			}
-			if assistantMsgID != "" && mid != assistantMsgID {
-				continue
-			}
-			var targetBuf *strings.Builder
-			isThinking := ptype == "reasoning"
-			if isThinking {
-				targetBuf = reasoningBuf
-			} else {
-				targetBuf = textBuf
-			}
-			if targetBuf == nil {
-				continue
-			}
-			if delta != "" {
-				targetBuf.WriteString(delta)
-			} else {
-				prev := targetBuf.String()
-				delta = text
-				if prev != "" && strings.HasPrefix(text, prev) {
-					delta = text[len(prev):]
-					targetBuf.Reset()
-					targetBuf.WriteString(text)
-				} else {
-					targetBuf.WriteString(text)
+
+			switch evType {
+			case "message.updated":
+				sid := getString(raw, "properties", "info", "sessionID")
+				role := getString(raw, "properties", "info", "role")
+				if sid == sessionID && role == "assistant" {
+					assistantMsgID = getString(raw, "properties", "info", "id")
 				}
-			}
-			if delta == "" {
-				continue
-			}
-			log.Printf("[opencode] event message.part.updated session_id=%s source_message_id=%s assistant_message_id=%s part_type=%s delta_len=%d text_len=%d used_native_delta=%t", sessionID, src.MessageID, mid, ptype, len(delta), len(text), getString(raw, "properties", "delta") != "")
-			gotText = true
-			out <- protocol.ServerMessage{
-				Type:      "stream_chunk",
-				MessageID: src.MessageID,
-				SessionID: src.SessionID,
-				Timestamp: time.Now().UnixMilli(),
-				Payload: protocol.StreamChunkPayload{
-					Content:    delta,
-					IsThinking: isThinking,
-					IsFinal:    false,
-					Metadata: map[string]interface{}{
-						"provider_id": getString(raw, "properties", "info", "providerID"),
-						"model_id":    getString(raw, "properties", "info", "modelID"),
-						"part_type":   ptype,
+			case "message.part.updated":
+				sid := firstNonEmpty(
+					getString(raw, "properties", "part", "sessionID"),
+					getString(raw, "properties", "sessionID"),
+				)
+				if sid != sessionID {
+					continue
+				}
+				mid := firstNonEmpty(
+					getString(raw, "properties", "part", "messageID"),
+					getString(raw, "properties", "messageID"),
+				)
+				ptype := firstNonEmpty(
+					getString(raw, "properties", "part", "type"),
+					getString(raw, "properties", "type"),
+				)
+				text := getString(raw, "properties", "part", "text")
+				if text == "" {
+					text = getString(raw, "properties", "part", "reasoning")
+				}
+				delta := firstNonEmpty(
+					getStringFlexible(raw, "properties", "delta"),
+					getStringFlexible(raw, "properties", "part", "delta"),
+					getStringFlexible(raw, "properties", "part", "text_delta"),
+					getStringFlexible(raw, "properties", "part", "reasoning_delta"),
+				)
+				if ptype != "text" && ptype != "reasoning" {
+					continue
+				}
+				if assistantMsgID != "" && mid != assistantMsgID {
+					continue
+				}
+				var targetBuf *strings.Builder
+				isThinking := ptype == "reasoning"
+				if isThinking {
+					targetBuf = reasoningBuf
+				} else {
+					targetBuf = textBuf
+				}
+				if targetBuf == nil {
+					continue
+				}
+				if delta != "" {
+					targetBuf.WriteString(delta)
+				} else {
+					prev := targetBuf.String()
+					delta = text
+					if prev != "" && strings.HasPrefix(text, prev) {
+						delta = text[len(prev):]
+						targetBuf.Reset()
+						targetBuf.WriteString(text)
+					} else {
+						targetBuf.WriteString(text)
+					}
+				}
+				if delta == "" {
+					continue
+				}
+				log.Printf("[opencode] event message.part.updated session_id=%s source_message_id=%s assistant_message_id=%s part_type=%s delta_len=%d text_len=%d used_native_delta=%t", sessionID, src.MessageID, mid, ptype, len(delta), len(text), getString(raw, "properties", "delta") != "")
+				gotText = true
+				out <- protocol.ServerMessage{
+					Type:      "stream_chunk",
+					MessageID: src.MessageID,
+					SessionID: src.SessionID,
+					Timestamp: time.Now().UnixMilli(),
+					Payload: protocol.StreamChunkPayload{
+						Content:    delta,
+						IsThinking: isThinking,
+						IsFinal:    false,
+						Metadata: map[string]interface{}{
+							"provider_id": getString(raw, "properties", "info", "providerID"),
+							"model_id":    getString(raw, "properties", "info", "modelID"),
+							"part_type":   ptype,
+						},
 					},
-				},
+				}
+			case "message.part.delta":
+				sid := firstNonEmpty(
+					getString(raw, "properties", "part", "sessionID"),
+					getString(raw, "properties", "sessionID"),
+				)
+				if sid != "" && sid != sessionID {
+					continue
+				}
+				mid := firstNonEmpty(
+					getString(raw, "properties", "part", "messageID"),
+					getString(raw, "properties", "messageID"),
+				)
+				ptype := firstNonEmpty(
+					getString(raw, "properties", "part", "type"),
+					getString(raw, "properties", "type"),
+				)
+				if ptype == "" {
+					ptype = "text"
+				}
+				if ptype != "text" && ptype != "reasoning" {
+					continue
+				}
+				if assistantMsgID != "" && mid != "" && mid != assistantMsgID {
+					continue
+				}
+				delta := firstNonEmpty(
+					getStringFlexible(raw, "properties", "delta"),
+					getStringFlexible(raw, "properties", "part", "delta"),
+					getStringFlexible(raw, "properties", "part", "text_delta"),
+					getStringFlexible(raw, "properties", "part", "reasoning_delta"),
+					getStringFlexible(raw, "delta"),
+				)
+				if delta == "" {
+					continue
+				}
+				var targetBuf *strings.Builder
+				isThinking := ptype == "reasoning"
+				if isThinking {
+					targetBuf = reasoningBuf
+				} else {
+					targetBuf = textBuf
+				}
+				if targetBuf == nil {
+					continue
+				}
+				log.Printf("[opencode] event message.part.delta session_id=%s source_message_id=%s assistant_message_id=%s part_type=%s delta_len=%d", sessionID, src.MessageID, mid, ptype, len(delta))
+				targetBuf.WriteString(delta)
+				gotText = true
+				out <- protocol.ServerMessage{
+					Type:      "stream_chunk",
+					MessageID: src.MessageID,
+					SessionID: src.SessionID,
+					Timestamp: time.Now().UnixMilli(),
+					Payload: protocol.StreamChunkPayload{
+						Content:    delta,
+						IsThinking: isThinking,
+						IsFinal:    false,
+						Metadata: map[string]interface{}{
+							"provider_id": getString(raw, "properties", "info", "providerID"),
+							"model_id":    getString(raw, "properties", "info", "modelID"),
+							"part_type":   ptype,
+						},
+					},
+				}
+			case "session.error":
+				sid := getString(raw, "properties", "sessionID")
+				if sid != sessionID {
+					continue
+				}
+				msg := getString(raw, "properties", "error", "data", "message")
+				if msg == "" {
+					msg = getString(raw, "properties", "error", "data")
+				}
+				if msg == "" {
+					msg = "OpenCode session.error"
+				}
+				out <- protocol.ServerMessage{
+					Type:      "error",
+					MessageID: src.MessageID,
+					SessionID: src.SessionID,
+					Timestamp: time.Now().UnixMilli(),
+					Payload: protocol.ErrorPayload{
+						Code:      "session_error",
+						Message:   msg,
+						Retryable: true,
+					},
+				}
+				cancel()
+				return
+			case "session.idle":
+				sid := getString(raw, "properties", "sessionID")
+				if sid != sessionID {
+					continue
+				}
+				if !gotText {
+					continue
+				}
+				log.Printf("[opencode] event session.idle session_id=%s source_message_id=%s final_len=%d", sessionID, src.MessageID, textBuf.Len())
+				out <- protocol.ServerMessage{
+					Type:      "stream_end",
+					MessageID: src.MessageID,
+					SessionID: src.SessionID,
+					Timestamp: time.Now().UnixMilli(),
+					Payload: protocol.StreamEndPayload{
+						Content: textBuf.String(),
+						IsFinal: true,
+					},
+				}
+				cancel()
+				return
 			}
-		case "session.error":
-			sid := getString(raw, "properties", "sessionID")
-			if sid != sessionID {
+			continue
+		}
+
+		if strings.HasPrefix(line, "event:") {
+			currentEventType = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
+			continue
+		}
+		if strings.HasPrefix(line, "data:") {
+			chunk := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+			if chunk == "" {
 				continue
 			}
-			msg := getString(raw, "properties", "error", "data", "message")
-			if msg == "" {
-				msg = getString(raw, "properties", "error", "data")
+			if dataBuf.Len() > 0 {
+				dataBuf.WriteByte('\n')
 			}
-			if msg == "" {
-				msg = "OpenCode session.error"
-			}
-			out <- protocol.ServerMessage{
-				Type:      "error",
-				MessageID: src.MessageID,
-				SessionID: src.SessionID,
-				Timestamp: time.Now().UnixMilli(),
-				Payload: protocol.ErrorPayload{
-					Code:      "session_error",
-					Message:   msg,
-					Retryable: true,
-				},
-			}
-			cancel()
-			return
-		case "session.idle":
-			sid := getString(raw, "properties", "sessionID")
-			if sid != sessionID {
-				continue
-			}
-			if !gotText {
-				continue
-			}
-			log.Printf("[opencode] event session.idle session_id=%s source_message_id=%s final_len=%d", sessionID, src.MessageID, textBuf.Len())
-			out <- protocol.ServerMessage{
-				Type:      "stream_end",
-				MessageID: src.MessageID,
-				SessionID: src.SessionID,
-				Timestamp: time.Now().UnixMilli(),
-				Payload: protocol.StreamEndPayload{
-					Content: textBuf.String(),
-					IsFinal: true,
-				},
-			}
-			cancel()
-			return
+			dataBuf.WriteString(chunk)
+			continue
 		}
 	}
 }

@@ -9,6 +9,8 @@ PORT=3001
 LOG_LEVEL="INFO"
 LOG_FILE="opencode.log"
 HOST="${HOST:-}"
+BACKGROUND="${BACKGROUND:-0}"
+FOLLOW_LOGS="${FOLLOW_LOGS:-1}"
 
 if [ -z "${DEEPSEEK_API_KEY:-}" ]; then
     echo "🧠 提示：未设置 DEEPSEEK_API_KEY，deepseek provider 与 opencode-mem 可能不可用。"
@@ -45,30 +47,32 @@ if [ -n "$HOST" ]; then
     fi
 fi
 
-# 使用 nohup 后台启动
-# 2>&1 将错误输出也合并到日志文件中
-nohup opencode serve $HOST_ARGS --port $PORT --log-level $LOG_LEVEL --print-logs > "$LOG_FILE" 2>&1 &
+if [ "$BACKGROUND" = "1" ]; then
+    nohup opencode serve $HOST_ARGS --port $PORT --log-level $LOG_LEVEL --print-logs > "$LOG_FILE" 2>&1 &
+    NEW_PID=$!
 
-# 获取新进程 PID
-NEW_PID=$!
+    sleep 1
+    if ps -p $NEW_PID > /dev/null; then
+        echo "✅ 服务已成功在后台启动！"
+        echo "📌 PID: $NEW_PID"
+        echo "📂 日志文件: $(pwd)/$LOG_FILE"
 
-# 等待一秒检查进程是否还在
-sleep 1
-if ps -p $NEW_PID > /dev/null; then
-    echo "✅ 服务已成功在后台启动！"
-    echo "📌 PID: $NEW_PID"
-    echo "📂 日志文件: $(pwd)/$LOG_FILE"
-    echo "📝 您可以运行 'tail -f $LOG_FILE' 实时查看日志。"
+        for _ in $(seq 1 20); do
+            if curl -fsS --max-time 1 "http://localhost:${PORT}/global/health" >/dev/null 2>&1; then
+                echo "✅ 健康检查通过: http://localhost:${PORT}/global/health"
+                break
+            fi
+            sleep 0.5
+        done
 
-    for _ in $(seq 1 20); do
-        if curl -fsS --max-time 1 "http://localhost:${PORT}/global/health" >/dev/null 2>&1; then
-            echo "✅ 健康检查通过: http://localhost:${PORT}/global/health"
-            exit 0
+        if [ "$FOLLOW_LOGS" = "1" ]; then
+            tail -f "$LOG_FILE"
         fi
-        sleep 0.5
-    done
-    echo "⚠️  服务进程已启动，但健康检查未通过，请检查日志: $LOG_FILE"
-else
+        exit 0
+    fi
+
     echo "❌ 启动失败，请检查 $LOG_FILE 中的错误信息。"
     exit 1
 fi
+
+opencode serve $HOST_ARGS --port $PORT --log-level $LOG_LEVEL --print-logs 2>&1 | tee "$LOG_FILE"

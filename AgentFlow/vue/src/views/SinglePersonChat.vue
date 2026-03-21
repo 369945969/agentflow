@@ -66,6 +66,19 @@ const shouldStickToBottom = ref(true)
 const trimTrailingBlankLines = (text: string) => text.replace(/\n{3,}$/g, '\n').replace(/\s+$/g, '')
 const trimLeadingBlankLines = (text: string) => text.replace(/^\s*\n+/g, '')
 
+const stripMemoryLines = (text: string) => {
+  if (!text) return ''
+  return text
+    .split('\n')
+    .filter(line => {
+      const trimmed = line.trimStart()
+      if (trimmed.startsWith('[MEMORY]')) return false
+      if (trimmed.startsWith('[MEMORY')) return false
+      return true
+    })
+    .join('\n')
+}
+
 const scrollMessagesToBottom = (smooth = false) => {
   nextTick(() => {
     const el = messageListRef.value
@@ -123,17 +136,17 @@ const upsertAgentMessage = (message: ServerMessage) => {
   const existing = messages.value.find((item: any) => item.type === 'agent' && item.streamKey === streamKey)
 
   if (message.type === 'stream_chunk') {
+    const chunk = stripMemoryLines(payload.content || '')
+    if (!chunk) return
     if (existing) {
       existing.timestamp = message.timestamp || Date.now()
       existing.isFinal = false
       existing.isStreaming = true
       if (isThinking) {
-        existing.content += payload.content || ''
-        existing.content = trimLeadingBlankLines(existing.content)
+        existing.content = trimLeadingBlankLines(stripMemoryLines(existing.content + chunk))
         scrollThinkingViewport(streamKey)
       } else {
-        existing.content += payload.content || ''
-        existing.content = trimLeadingBlankLines(existing.content)
+        existing.content = trimLeadingBlankLines(stripMemoryLines(existing.content + chunk))
         if (shouldStickToBottom.value) {
           scrollMessagesToBottom()
         }
@@ -145,7 +158,7 @@ const upsertAgentMessage = (message: ServerMessage) => {
       id: streamKey,
       streamKey,
       type: 'agent',
-      content: isThinking ? '' : trimLeadingBlankLines(payload.content || ''),
+      content: isThinking ? '' : trimLeadingBlankLines(chunk),
       isThinking,
       isFinal: false,
       isStreaming: true,
@@ -153,7 +166,7 @@ const upsertAgentMessage = (message: ServerMessage) => {
     }
     messages.value.push(nextMessage)
     if (isThinking) {
-      nextMessage.content = trimLeadingBlankLines(payload.content || '')
+      nextMessage.content = trimLeadingBlankLines(chunk)
       scrollThinkingViewport(streamKey)
     } else if (shouldStickToBottom.value) {
       scrollMessagesToBottom()
@@ -169,8 +182,9 @@ const upsertAgentMessage = (message: ServerMessage) => {
     scrollThinkingViewport(thinkingKey)
   }
   const finalExisting = messages.value.find((item: any) => item.type === 'agent' && item.streamKey === answerKey)
+  const finalContent = stripMemoryLines(payload.content || '')
   if (finalExisting) {
-    finalExisting.content = trimTrailingBlankLines(trimLeadingBlankLines(payload.content || finalExisting.content || ''))
+    finalExisting.content = trimTrailingBlankLines(trimLeadingBlankLines(stripMemoryLines(finalContent || finalExisting.content || '')))
     finalExisting.timestamp = message.timestamp || Date.now()
     finalExisting.isThinking = false
     finalExisting.isFinal = true
@@ -185,7 +199,7 @@ const upsertAgentMessage = (message: ServerMessage) => {
     id: answerKey,
     streamKey: answerKey,
     type: 'agent',
-    content: trimTrailingBlankLines(trimLeadingBlankLines(payload.content || '')),
+    content: trimTrailingBlankLines(trimLeadingBlankLines(stripMemoryLines(finalContent || ''))),
     isThinking: false,
     isFinal: true,
     isStreaming: false,
@@ -295,38 +309,6 @@ const sendMessage = () => {
   
   // Send via WebSocket
   const messageId = ws.sendText(inputText.value.trim(), selectedUserId.value)
-  
-  const now = Date.now()
-  const thinkingKey = `${messageId}:thinking`
-  const answerKey = `${messageId}:answer`
-
-  if (thinkingEnabled.value && !simplifiedOutput.value) {
-    messages.value.push({
-      id: thinkingKey,
-      streamKey: thinkingKey,
-      type: 'agent',
-      content: '',
-      isThinking: true,
-      isFinal: false,
-      isStreaming: true,
-      timestamp: now
-    })
-    thinkingExpanded.value = {
-      ...thinkingExpanded.value,
-      [thinkingKey]: true
-    }
-  }
-
-  messages.value.push({
-    id: answerKey,
-    streamKey: answerKey,
-    type: 'agent',
-    content: '',
-    isThinking: false,
-    isFinal: false,
-    isStreaming: true,
-    timestamp: now
-  })
 
   console.log('[SinglePersonChat] Message dispatched with ID:', messageId)
   inputText.value = ''
