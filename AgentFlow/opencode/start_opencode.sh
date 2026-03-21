@@ -8,6 +8,7 @@ export DEEPSEEK_API_KEY=sk-6696ebd5e41f4fd9a1a218b57a85ad6b
 PORT=3001
 LOG_LEVEL="INFO"
 LOG_FILE="opencode.log"
+HOST="${HOST:-}"
 
 if [ -z "${DEEPSEEK_API_KEY:-}" ]; then
     echo "🧠 提示：未设置 DEEPSEEK_API_KEY，deepseek provider 与 opencode-mem 可能不可用。"
@@ -36,9 +37,17 @@ fi
 
 echo "🚀 正在后台启动 OpenCode 服务 (端口: $PORT)..."
 
+# 如果 opencode 支持 --host，则允许通过 HOST=0.0.0.0 绑定到公网网卡
+HOST_ARGS=""
+if [ -n "$HOST" ]; then
+    if opencode serve --help 2>/dev/null | grep -q -- '--host'; then
+        HOST_ARGS="--host $HOST"
+    fi
+fi
+
 # 使用 nohup 后台启动
 # 2>&1 将错误输出也合并到日志文件中
-nohup opencode serve --port $PORT --log-level $LOG_LEVEL --print-logs > "$LOG_FILE" 2>&1 &
+nohup opencode serve $HOST_ARGS --port $PORT --log-level $LOG_LEVEL --print-logs > "$LOG_FILE" 2>&1 &
 
 # 获取新进程 PID
 NEW_PID=$!
