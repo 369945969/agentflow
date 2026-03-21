@@ -2299,3 +2299,4 @@ deep-agent-core/
 │       └── safety.go               # 路径安全检查
 ├── go.mod
 └── Dockerfile
+这个设计涵盖了所有你提到的需求点，并且针对Go语言的并发特性（goroutine、channel、sync包）做了适配。每个模块的职责、输入输出、核心算法都描述得很详细，可以直接交给AI编写具体代码。需要我对某个模块进一步细化吗？

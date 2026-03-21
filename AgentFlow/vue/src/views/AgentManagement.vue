@@ -155,7 +155,7 @@ const getModelName = (modelId: string) => {
       
       <!-- Header -->
       <div class="flex justify-between items-center">
-        <h1 style="color: color-mix( in oklab , #fff 95% , transparent );" class="text-2xl font-semibold">Agents</h1>
+         <h1 style="color: color-mix( in oklab , #fff 95% , transparent );" class="text-2xl font-semibold">数字员工</h1>
         <div class="flex items-center gap-4">
           <!-- Create Button -->
           <button 

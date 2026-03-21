@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { useRoute } from 'vue-router'
 
-const router = useRouter()
 const route = useRoute()
 
 // State for main navigation sidebar
@@ -11,10 +10,10 @@ const isSidebarCollapsed = ref(false)
 // Frequently used items (Top section)
 const primaryNavItems = [
   { name: '系统监控', icon: 'lucide:layout-dashboard', path: '/' },
+  { name: '数字员工', icon: 'lucide:bot', path: '/agent-management' },
   { name: '单人对话', icon: 'lucide:user', path: '/single-person-chat' },
   { name: '多人对话', icon: 'lucide:message-square', path: '/multi-person-chat' },
   { name: '编排画布', icon: 'lucide:workflow', path: '/orchestration-editor' },
-  { name: 'Agents', icon: 'lucide:bot', path: '/agent-management' },
   { name: '定时任务', icon: 'lucide:calendar', path: '/schedule-tasks' },
 ]
 

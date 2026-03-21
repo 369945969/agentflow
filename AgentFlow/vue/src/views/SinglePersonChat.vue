@@ -1,54 +1,239 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import BaseLayout from '../components/BaseLayout.vue'
 import { API_BASE_URL } from '../config/api'
 
-// State
+// ========== Models ==========
 const models = ref<any[]>([])
 const selectedModelId = ref('')
-const thinkingEnabled = ref(true)      // 默认开启
-const simplifiedOutput = ref(false)    // 默认关闭 (原“查看中间结果”)
+const thinkingEnabled = ref(true)
+const simplifiedOutput = ref(false)
 
 const fetchModels = async () => {
   try {
     const response = await fetch(`${API_BASE_URL}/api/models/`)
     const data = await response.json()
     models.value = data
-    // Default select
     const defaultModel = data.find((m: any) => m.is_default)
-    if (defaultModel) {
-      selectedModelId.value = defaultModel.id
-    } else if (data.length > 0) {
-      selectedModelId.value = data[0].id
-    }
+    if (defaultModel) selectedModelId.value = defaultModel.id
+    else if (data.length > 0) selectedModelId.value = data[0].id
   } catch (error) {
     console.error('Failed to fetch models:', error)
   }
 }
 
-onMounted(fetchModels)
+// ========== Users ==========
+const users = ref<any[]>([])
+const searchQuery = ref('')
+
+
+// Fetch users sorted by ID descending (newest first)
+const fetchUsers = async () => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/agents/`)
+    if (response.ok) {
+      users.value = await response.json()
+      
+      // Auto-select first user as default conversation user
+      if (!selectedUserId.value && users.value.length > 0) {
+        selectedUserId.value = users.value[0].id
+      }
+    } else {
+      console.warn('Failed to fetch users')
+      users.value = []
+    }
+  } catch (error) {
+    console.error('Error fetching users:', error)
+    users.value = []
+  }
+}
+
+// Filtered users based on search query
+const filteredUsers = computed(() => {
+  if (!searchQuery.value.trim()) return users.value
+
+  const query = searchQuery.value.toLowerCase().trim()
+  return users.value.filter(user =>
+    user.name.toLowerCase().includes(query)
+  )
+})
+
+// Selected user for this conversation
+const selectedUserId = ref('')
+const selectedUser = computed(() => {
+  if (!selectedUserId.value) return null
+  return users.value.find(u => u.id === selectedUserId.value)
+})
+const activeUserName = computed(() => selectedUser.value?.name || '--')
+
+// Users visible in collapsed sidebar mode (max 5, always include selected user)
+const visibleUsersInCollapsedMode = computed(() => {
+  const filtered = filteredUsers.value
+  if (filtered.length <= 5) return filtered
+  
+  // Always include selected user if exists in filtered results
+  const selectedUserObj = filtered.find(u => u.id === selectedUserId.value)
+  const otherUsers = filtered.filter(u => u.id !== selectedUserId.value)
+  
+  // If selected user exists, include it plus 4 others
+  if (selectedUserObj) {
+    return [selectedUserObj, ...otherUsers.slice(0, 4)]
+  } else {
+    return otherUsers.slice(0, 5)
+  }
+})
+
+// Sidebar state
+const leftSidebarCollapsed = ref(false) // 控制左侧边栏是否收起，默认展开
+const leftSidebarWidth = ref(320) // 左侧边栏宽度，可拖动调整
+const isDragging = ref(false) // 是否正在拖动分隔线
+const rightSidebarCollapsed = ref(true) // 控制右侧边栏是否收起，默认收起
+
+// Toggle left sidebar
+const toggleLeftSidebar = () => {
+  leftSidebarCollapsed.value = !leftSidebarCollapsed.value
+}
+
+// Select user from collapsed sidebar
+const selectUserFromCollapsed = (userId: string) => {
+  selectedUserId.value = userId
+}
+
+// Drag handling for resizing sidebar
+const startDrag = (event: MouseEvent) => {
+  isDragging.value = true
+  document.addEventListener('mousemove', handleDrag)
+  document.addEventListener('mouseup', stopDrag)
+  // Prevent text selection during drag
+  document.body.style.userSelect = 'none'
+  document.body.style.cursor = 'col-resize'
+  event.preventDefault()
+}
+
+const handleDrag = (event: MouseEvent) => {
+  if (!isDragging.value) return
+  
+  // Calculate new width based on mouse position
+  const container = document.querySelector('.flex.w-full.h-full.overflow-hidden')
+  if (container) {
+    const containerRect = container.getBoundingClientRect()
+    const mouseX = event.clientX - containerRect.left
+    // Set minimum and maximum width constraints
+    const minWidth = 200
+    const maxWidth = containerRect.width - 400 // Leave space for right sidebar
+    const newWidth = Math.max(minWidth, Math.min(mouseX, maxWidth))
+    
+    // Update left sidebar width
+    leftSidebarWidth.value = newWidth
+  }
+}
+
+const stopDrag = () => {
+  isDragging.value = false
+  document.removeEventListener('mousemove', handleDrag)
+  document.removeEventListener('mouseup', stopDrag)
+  // Restore normal cursor and text selection
+  document.body.style.userSelect = ''
+  document.body.style.cursor = ''
+}
+
+onMounted(() => {
+  fetchModels()
+  fetchUsers()
+})
 </script>
 
 <template>
   <BaseLayout>
     <div class="flex w-full h-full overflow-hidden bg-[#0F1928]">
+      <!-- Left Sidebar: Agent List -->
+       <!-- Collapsed state: small sidebar with user avatars -->
+       <div v-if="leftSidebarCollapsed" class="w-12 shrink-0 border-r border-white/10 bg-[#1A2536]/80 flex flex-col">
+         <div class="p-4 border-b border-white/5 flex items-center justify-center">
+           <button 
+             @click="toggleLeftSidebar"
+             class="p-2 rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-colors"
+              title="展开 数字员工"
+           >
+             <iconify-icon icon="lucide:menu" class="text-xl"></iconify-icon>
+           </button>
+         </div>
+         <div class="flex-1 overflow-y-auto py-2 custom-scrollbar">
+           <div class="flex flex-col items-center gap-2">
+              <button 
+                v-for="user in visibleUsersInCollapsedMode" 
+                :key="user.id"
+                @click="selectUserFromCollapsed(user.id)"
+                :title="user.name"
+                :class="['w-8 h-8 rounded-full flex items-center justify-center text-xs border transition-all hover:scale-110', selectedUserId === user.id ? 'bg-[#3B9BFF] text-white border-[#3B9BFF]' : 'bg-white/10 text-white/70 border-transparent hover:bg-white/20']"
+              >
+                {{ user.name.charAt(0) }}
+              </button>
+           </div>
+            <div v-if="filteredUsers.length > 5" class="text-center mt-2">
+              <div class="text-[10px] text-white/30">+{{ filteredUsers.length - 5 }}</div>
+           </div>
+         </div>
+       </div>
       
+      <!-- Expanded state: full sidebar -->
+      <div v-else :style="{ width: leftSidebarWidth + 'px' }" class="shrink-0 border-r border-white/10 bg-[#1A2536]/50 flex flex-col">
+        <div class="p-6 border-b border-white/5 flex flex-col gap-4">
+          <div class="flex justify-between items-center">
+             <h2 class="text-lg font-semibold text-white/95">数字员工</h2>
+            <button 
+              @click="toggleLeftSidebar"
+              class="p-2 rounded-full hover:bg-white/10 text-white/40 hover:text-white transition-colors"
+               title="收起 数字员工"
+            >
+              <iconify-icon icon="lucide:chevron-left" class="text-xl"></iconify-icon>
+            </button>
+          </div>
+          <div class="bg-black/20 border border-white/10 rounded-xl px-4 py-2.5 flex items-center gap-3">
+            <iconify-icon icon="lucide:search" class="text-white/40 text-sm"></iconify-icon>
+             <input v-model="searchQuery" type="text" placeholder="搜索数字员工名称..." class="bg-transparent border-none outline-none text-sm text-white/70 w-full">
+          </div>
+        </div>
+        <div class="p-4 overflow-y-auto flex-1 custom-scrollbar">
+          <div v-for="user in filteredUsers" :key="user.id" 
+               @click="selectedUserId = user.id"
+               :class="['p-4 rounded-xl cursor-pointer mb-2 transition-all', selectedUserId === user.id ? 'bg-[#3B9BFF]/20 border border-[#3B9BFF]/40' : 'bg-white/5 hover:bg-white/10']">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center">
+                <span class="text-sm text-white/70">{{ user.name[0] }}</span>
+              </div>
+              <div class="flex-1 min-w-0">
+                <h3 class="text-sm font-medium text-white truncate">{{ user.name }}</h3>
+                <p class="text-xs text-white/40 truncate">{{ user.description || 'No description' }}</p>
+              </div>
+            </div>
+          </div>
+          <div v-if="filteredUsers.length === 0" class="text-center py-8">
+            <iconify-icon icon="lucide:users" class="w-8 h-8 mx-auto mb-2 text-white/20" />
+            <div class="text-white/30 text-sm">{{ searchQuery ? '未找到匹配Agent' : '暂无Agent' }}</div>
+          </div>
+        </div>
+        <!-- Draggable separator between left sidebar and chat area -->
+        <div 
+          class="w-1 cursor-col-resize hover:bg-[#3B9BFF]/50 bg-white/10 shrink-0"
+          @mousedown="startDrag"
+          :class="{ 'bg-[#3B9BFF]': isDragging }"
+        ></div>
+      </div>
+
       <!-- Main Chat Area -->
       <main class="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <!-- Chat Header -->
-        <div class="h-16 border-b border-white/10 flex items-center px-6 bg-white/5 backdrop-blur-md shrink-0">
-          <h2 class="text-lg font-semibold text-white/95">单人对话</h2>
+        <div class="border-b border-white/10 bg-white/5 backdrop-blur-md shrink-0">
+          <div class="h-16 flex items-center px-6">
+            <h2 class="text-lg font-semibold text-white/95">{{ activeUserName }}</h2>
+          </div>
         </div>
-
-        <!-- Scrollable Messages -->
         <div class="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
-           <div class="flex flex-col items-center justify-center h-full text-white/30 text-sm">
-             <iconify-icon icon="lucide:user" class="text-4xl mb-4"></iconify-icon>
-             开始你的单人对话...
-           </div>
+          <div class="flex flex-col items-center justify-center h-full text-white/30 text-sm">
+            <iconify-icon icon="lucide:user" class="text-4xl mb-4"></iconify-icon>
+            开始你的单人对话...
+          </div>
         </div>
-
-        <!-- Chat Input -->
         <div class="p-6 border-t border-white/10 bg-white/5 backdrop-blur-md shrink-0">
           <div class="flex gap-4">
             <textarea placeholder="输入消息..." rows="1" class="flex-1 bg-white/5 border border-white/10 rounded-xl p-3 text-sm text-white/90 outline-none focus:border-[#3B9BFF]/50 resize-none"></textarea>
@@ -57,38 +242,51 @@ onMounted(fetchModels)
         </div>
       </main>
 
-      <!-- Right Sidebar: Controls -->
-      <aside class="w-[380px] shrink-0 border-l border-white/10 bg-[#1A2536] flex flex-col">
-        <div class="p-6 border-b border-white/5">
-          <h3 class="text-lg font-semibold text-white/95">会话设置</h3>
-        </div>
-        
-        <div class="p-6 space-y-8 overflow-y-auto custom-scrollbar flex-1">
-          <!-- Model Selection -->
-          <div class="space-y-3">
-            <label class="text-xs text-white/40 font-bold uppercase tracking-widest">选择模型</label>
-            <select v-model="selectedModelId" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white outline-none">
-              <option v-for="m in models" :key="m.id" :value="m.id">{{ m.name }}</option>
-            </select>
-          </div>
+       <!-- Right Sidebar: Controls -->
+       <!-- Collapsed state: small expand button -->
+       <div v-if="rightSidebarCollapsed" class="w-12 shrink-0 border-l border-white/10 bg-[#1A2536]/80 flex flex-col items-center py-4">
+         <button 
+           @click="rightSidebarCollapsed = false"
+           class="p-2 rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-colors"
+           title="展开设置"
+         >
+           <iconify-icon icon="lucide:settings" class="text-xl"></iconify-icon>
+         </button>
+       </div>
+       
+       <!-- Expanded state: full sidebar -->
+       <aside v-else class="w-[380px] shrink-0 border-l border-white/10 bg-[#1A2536] flex flex-col">
+         <div class="p-6 border-b border-white/5 flex justify-between items-center">
+           <h3 class="text-lg font-semibold text-white/95">会话设置</h3>
+           <button 
+             @click="rightSidebarCollapsed = true"
+             class="p-2 rounded-full hover:bg-white/10 text-white/40 hover:text-white transition-colors"
+             title="收起设置"
+           >
+             <iconify-icon icon="lucide:chevron-right" class="text-xl"></iconify-icon>
+           </button>
+         </div>
+         
+         <div class="p-6 space-y-8 overflow-y-auto custom-scrollbar flex-1">
 
-          <!-- Toggles -->
-          <div class="space-y-4">
-            <div class="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/10 cursor-pointer" @click="thinkingEnabled = !thinkingEnabled">
-              <span class="text-sm text-white/90">开启 Thinking 模式</span>
-              <div class="w-10 h-6 rounded-full p-1 transition-all" :class="thinkingEnabled ? 'bg-[#3B9BFF]' : 'bg-white/10'">
-                <div class="w-4 h-4 bg-white rounded-full transition-all" :class="thinkingEnabled ? 'translate-x-4' : 'translate-x-0'"></div>
-              </div>
-            </div>
-            <div class="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/10 cursor-pointer" @click="simplifiedOutput = !simplifiedOutput">
-              <span class="text-sm text-white/90">简化输出模式</span>
-              <div class="w-10 h-6 rounded-full p-1 transition-all" :class="simplifiedOutput ? 'bg-[#3B9BFF]' : 'bg-white/10'">
-                <div class="w-4 h-4 bg-white rounded-full transition-all" :class="simplifiedOutput ? 'translate-x-4' : 'translate-x-0'"></div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </aside>
+
+           <!-- Toggles -->
+           <div class="space-y-4">
+             <div class="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/10 cursor-pointer" @click="thinkingEnabled = !thinkingEnabled">
+               <span class="text-sm text-white/90">开启 Thinking 模式</span>
+               <div class="w-10 h-6 rounded-full p-1 transition-all" :class="thinkingEnabled ? 'bg-[#3B9BFF]' : 'bg-white/10'">
+                 <div class="w-4 h-4 bg-white rounded-full transition-all" :class="thinkingEnabled ? 'translate-x-4' : 'translate-x-0'"></div>
+               </div>
+             </div>
+             <div class="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/10 cursor-pointer" @click="simplifiedOutput = !simplifiedOutput">
+               <span class="text-sm text-white/90">简化输出模式</span>
+               <div class="w-10 h-6 rounded-full p-1 transition-all" :class="simplifiedOutput ? 'bg-[#3B9BFF]' : 'bg-white/10'">
+                 <div class="w-4 h-4 bg-white rounded-full transition-all" :class="simplifiedOutput ? 'translate-x-4' : 'translate-x-0'"></div>
+               </div>
+             </div>
+           </div>
+         </div>
+       </aside>
     </div>
   </BaseLayout>
 </template>

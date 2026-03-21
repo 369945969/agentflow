@@ -266,7 +266,7 @@ import BaseLayout from '../components/BaseLayout.vue'
 <div id="28:252" orderindex="83">
 <label id="28:253" orderindex="80" class="flex items-center gap-y-3 gap-x-3">
 <div id="28:254" orderindex="80" class="relative">
-<input id="28:255" orderindex="80" class="peer overflow-x-hidden overflow-y-hidden whitespace-nowrap absolute w-px h-px -m-px" style="clip-path: inset( 50% ); padding: 0; border-width: 0;" type="checkbox" checked="">
+<input id="28:255" orderindex="80" class="peer overflow-x-hidden overflow-y-hidden whitespace-nowrap absolute w-px h-px -m-px" style="clip-path: inset( 50% ); padding: 0; border-width: 0;" type="checkbox" :checked="true">
 <div id="28:256" orderindex="81" style="background-color: color-mix( in oklab , #3B9BFF 25% , transparent ); backdrop-filter: blur(12px); border-color: color-mix( in oklab , #3B9BFF 60% , transparent );" class="w-14 h-7 border-[1px] border-solid rounded-full">
 <div id="28:257" orderindex="80" style="background-color: rgba(95, 180, 255, 1); box-shadow: 0 0 rgba(0, 0, 0, 0), 0 0 rgba(0, 0, 0, 0), 0 0 rgba(0, 0, 0, 0), 0 0 rgba(0, 0, 0, 0), 0 0 12px rgba(95, 180, 255, 0.6);" class="absolute top-1 left-8 w-5 h-5 rounded-full"></div>
 </div>

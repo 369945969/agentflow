@@ -21,17 +21,17 @@ onMounted(() => {
 
 
 const isCreateModalOpen = ref(false)
-const newModel = ref({ name: '', provider: 'OpenAI', base_url: '', api_key: '', model_name: '', description: '', is_default: false })
+const newModel = ref({ id: '', name: '', provider: 'OpenAI', base_url: '', api_key: '', model_name: '', description: '', is_default: false })
 
 const openCreateModal = () => {
   isCreateModalOpen.value = true
   isEditing.value = false
-  newModel.value = { name: '', provider: 'OpenAI', base_url: '', api_key: '', model_name: '', description: '', is_default: false }
+  newModel.value = { id: '', name: '', provider: 'OpenAI', base_url: '', api_key: '', model_name: '', description: '', is_default: false }
 }
 
 const closeCreateModal = () => {
   isCreateModalOpen.value = false
-  newModel.value = { name: '', provider: 'OpenAI', base_url: '', api_key: '', model_name: '', description: '', is_default: false }
+  newModel.value = { id: '', name: '', provider: 'OpenAI', base_url: '', api_key: '', model_name: '', description: '', is_default: false }
 }
 
 

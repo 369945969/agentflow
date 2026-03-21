@@ -14,6 +14,17 @@ type Skill struct {
 	CreatedAt   time.Time `json:"created_at" db:"created_at"`
 }
 
+type Group struct {
+	ID               string    `json:"id" db:"id"`
+	Name             string    `json:"name" db:"name"`
+	CreatedAt        time.Time `json:"created_at" db:"created_at"`
+	Members          []string  `json:"members"`
+	GroupRuleMode    string    `json:"group_rule_mode,omitempty" db:"group_rule_mode"`
+	ThinkingEnabled  bool      `json:"thinking_enabled,omitempty" db:"thinking_enabled"`
+	SimplifiedOutput bool      `json:"simplified_output,omitempty" db:"simplified_output"`
+	CustomRule       string    `json:"custom_rule,omitempty" db:"custom_rule"`
+}
+
 type Agent struct {
 	ID           string    `json:"id" db:"id"`
 	Name         string    `json:"name" db:"name"`
@@ -43,4 +54,3 @@ type Model struct {
 	IsDefault   bool      `json:"is_default" db:"is_default"`
 	CreatedAt   time.Time `json:"created_at" db:"created_at"`
 }
-

@@ -3,6 +3,7 @@ package routes
 import (
 	"apiServer/db"
 	"apiServer/models"
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -55,6 +56,12 @@ func createAgent(c *gin.Context) {
 		return
 	}
 
+	// Add agent to default group
+	_, err = db.DB.Exec("INSERT INTO group_members (group_id, user_id) VALUES ('default', ?)", id)
+	if err != nil {
+		log.Printf("Failed to add agent to default group: %v", err)
+	}
+
 	var newAgent models.Agent
 	err = db.DB.QueryRow("SELECT id, name, description, model, system_prompt, created_at FROM agents WHERE id = ?", id).
 		Scan(&newAgent.ID, &newAgent.Name, &newAgent.Description, &newAgent.Model, &newAgent.SystemPrompt, &newAgent.CreatedAt)
@@ -69,6 +76,8 @@ func createAgent(c *gin.Context) {
 func deleteAgent(c *gin.Context) {
 	id := c.Param("id")
 	_, err := db.DB.Exec("DELETE FROM agents WHERE id = ?", id)
+	// Also remove from any groups
+	db.DB.Exec("DELETE FROM group_members WHERE user_id = ?", id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete agent"})
 		return

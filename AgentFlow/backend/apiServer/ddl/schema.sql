@@ -43,3 +43,17 @@ CREATE TABLE IF NOT EXISTS edges (
     metadata JSON, 
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Groups table
+CREATE TABLE IF NOT EXISTS groups (
+    id VARCHAR PRIMARY KEY,
+    name VARCHAR NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Group members table
+CREATE TABLE IF NOT EXISTS group_members (
+    group_id VARCHAR NOT NULL,
+    user_id VARCHAR NOT NULL,
+    PRIMARY KEY (group_id, user_id)
+);
