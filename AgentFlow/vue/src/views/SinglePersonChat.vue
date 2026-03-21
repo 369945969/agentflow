@@ -1,13 +1,137 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import BaseLayout from '../components/BaseLayout.vue'
-import { API_BASE_URL } from '../config/api'
+import { API_BASE_URL, WEBSOCKET_URL } from '../config/api'
+import { getWebSocketInstance, type Message as WSMessage, type ServerMessage } from '../api/websocket'
 
 // ========== Models ==========
 const models = ref<any[]>([])
 const selectedModelId = ref('')
 const thinkingEnabled = ref(true)
 const simplifiedOutput = ref(false)
+
+// ========== Chat ==========
+const messages = ref<any[]>([])
+const inputText = ref('')
+const isConnected = ref(false)
+
+// ========== WebSocket ==========
+const ws = getWebSocketInstance()
+const wsInitialized = ref(false)
+
+// Update agent settings in database
+const updateAgentSettings = async () => {
+  const userId = selectedUserId.value
+  if (!userId) return
+  
+  const user = selectedUser.value
+  if (!user) return
+  
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/agents/${userId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...user,
+        thinking_enabled: thinkingEnabled.value,
+        simplified_output: simplifiedOutput.value
+      })
+    })
+    
+    if (response.ok) {
+      // Update local user data
+      const userIndex = users.value.findIndex(u => u.id === userId)
+      if (userIndex !== -1) {
+        users.value[userIndex].thinking_enabled = thinkingEnabled.value
+        users.value[userIndex].simplified_output = simplifiedOutput.value
+      }
+      console.log('数字员工设置已更新')
+    } else {
+      const error = await response.json()
+      console.error('更新失败:', error)
+    }
+  } catch (error) {
+    console.error('更新数字员工设置时发生错误:', error)
+  }
+}
+
+// ========== WebSocket Functions ==========
+const setupWebSocket = () => {
+  if (wsInitialized.value) return
+  wsInitialized.value = true
+  
+  // Set up event listeners if not already set up
+  ws.on('connection-change', (connected: boolean) => {
+    isConnected.value = connected
+    console.log('WebSocket connection changed:', connected)
+  })
+  
+  ws.on('message', (message: ServerMessage) => {
+    console.log('Received message:', message)
+    // Handle incoming messages
+    if (message.type === 'stream_chunk' || message.type === 'stream_end') {
+      // Add to messages
+      const payload = message.payload
+      if (payload && typeof payload === 'object') {
+        messages.value.push({
+          id: message.message_id || Date.now().toString(),
+          type: 'agent',
+          content: payload.content || '',
+          isThinking: payload.is_thinking || false,
+          isFinal: payload.is_final || false,
+          timestamp: message.timestamp || Date.now()
+        })
+      }
+    } else if (message.type === 'error') {
+      console.error('WebSocket error:', message.payload)
+    }
+  })
+  
+  // Connect if not already connected
+  if (!ws.getConnectionStatus()) {
+    ws.connect()
+  }
+}
+
+const sendMessage = () => {
+  if (!inputText.value.trim() || !selectedUserId.value) return
+  
+  const userMessage = {
+    id: Date.now().toString(),
+    type: 'user',
+    content: inputText.value.trim(),
+    timestamp: Date.now()
+  }
+  
+  messages.value.push(userMessage)
+  
+  // Send via WebSocket
+  const messageId = ws.sendText(inputText.value.trim(), selectedUserId.value, undefined, {
+    target_agent_id: selectedUserId.value,
+    override_config: {
+      stream_mode: 'realtime',
+      enable_thinking: thinkingEnabled.value,
+      return_strategy: {
+        type: 'immediate',
+        final_result_marker: '[FINAL]',
+        chunk_size: 1024,
+        debounce_ms: 50
+      },
+      timeout_ms: 30000,
+      max_retries: 1
+    }
+  })
+  
+  console.log('Message sent with ID:', messageId)
+  inputText.value = ''
+}
+
+const handleTextareaKeydown = (event: KeyboardEvent) => {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault()
+    sendMessage()
+  }
+}
 
 const fetchModels = async () => {
   try {
@@ -137,9 +261,33 @@ const stopDrag = () => {
   document.body.style.cursor = ''
 }
 
+// Watch for selected user changes to update settings
+watch(selectedUserId, () => {
+  const user = selectedUser.value
+  if (user) {
+    thinkingEnabled.value = user.thinking_enabled ?? true
+    simplifiedOutput.value = user.simplified_output ?? false
+    
+    // Update WebSocket user
+    ws.setUser(user.id)
+    
+    // Clear previous messages when switching users
+    messages.value = []
+  }
+  
+  // Ensure WebSocket is connected and set up
+  setupWebSocket()
+})
+
+// Watch for settings changes to save to database
+watch([thinkingEnabled, simplifiedOutput], () => {
+  updateAgentSettings()
+})
+
 onMounted(() => {
   fetchModels()
   fetchUsers()
+  setupWebSocket()
 })
 </script>
 
@@ -225,19 +373,30 @@ onMounted(() => {
       <main class="flex-1 flex flex-col min-w-0 overflow-hidden">
         <div class="border-b border-white/10 bg-white/5 backdrop-blur-md shrink-0">
           <div class="h-16 flex items-center px-6">
-            <h2 class="text-lg font-semibold text-white/95">{{ activeUserName }}</h2>
+            <div class="flex items-center gap-3">
+              <div class="w-2 h-2 rounded-full" :class="isConnected ? 'bg-green-500' : 'bg-red-500'" :title="isConnected ? '已连接到服务器' : '未连接'"></div>
+              <h2 class="text-lg font-semibold text-white/95">{{ activeUserName }}</h2>
+            </div>
           </div>
         </div>
         <div class="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
-          <div class="flex flex-col items-center justify-center h-full text-white/30 text-sm">
+          <div v-if="messages.length === 0" class="flex flex-col items-center justify-center h-full text-white/30 text-sm">
             <iconify-icon icon="lucide:user" class="text-4xl mb-4"></iconify-icon>
             开始你的单人对话...
+          </div>
+          <div v-else class="space-y-6">
+            <div v-for="message in messages" :key="message.id" class="flex" :class="message.type === 'user' ? 'justify-end' : 'justify-start'">
+              <div class="max-w-[70%] rounded-2xl p-4" :class="message.type === 'user' ? 'bg-[#3B9BFF] text-white' : 'bg-white/10 text-white/90'">
+                <div class="whitespace-pre-wrap">{{ message.content }}</div>
+                <div class="text-xs mt-2 opacity-60">{{ new Date(message.timestamp).toLocaleTimeString() }}</div>
+              </div>
+            </div>
           </div>
         </div>
         <div class="p-6 border-t border-white/10 bg-white/5 backdrop-blur-md shrink-0">
           <div class="flex gap-4">
-            <textarea placeholder="输入消息..." rows="1" class="flex-1 bg-white/5 border border-white/10 rounded-xl p-3 text-sm text-white/90 outline-none focus:border-[#3B9BFF]/50 resize-none"></textarea>
-            <button class="w-12 h-12 bg-[#3B9BFF] rounded-xl flex items-center justify-center text-white shadow-[0_0_20px_rgba(59,155,255,0.3)]"><iconify-icon icon="lucide:send" class="text-xl"></iconify-icon></button>
+            <textarea v-model="inputText" @keydown="handleTextareaKeydown" placeholder="输入消息..." rows="1" class="flex-1 bg-white/5 border border-white/10 rounded-xl p-3 text-sm text-white/90 outline-none focus:border-[#3B9BFF]/50 resize-none"></textarea>
+            <button @click="sendMessage" class="w-12 h-12 bg-[#3B9BFF] rounded-xl flex items-center justify-center text-white shadow-[0_0_20px_rgba(59,155,255,0.3)]"><iconify-icon icon="lucide:send" class="text-xl"></iconify-icon></button>
           </div>
         </div>
       </main>
