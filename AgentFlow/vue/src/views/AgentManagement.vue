@@ -54,7 +54,9 @@ const newAgent = ref<any>({
   name: '',
   description: '',
   model: '',
-  system_prompt: ''
+  system_prompt: '',
+  thinking_enabled: true,  // Default true
+  simplified_output: false // Default false
 })
 
 const toggleLayout = (type: 'grid' | 'list') => {
@@ -67,7 +69,9 @@ const openCreateModal = () => {
     name: '',
     description: '',
     model: '',
-    system_prompt: ''
+    system_prompt: '',
+    thinking_enabled: true,  // Default true
+    simplified_output: false // Default false
   }
   // Set default model
   const defaultModel = models.value.find((m: any) => m.is_default)
@@ -283,6 +287,24 @@ const getModelName = (modelId: string) => {
               <div class="space-y-4">
                 <label class="text-xs text-white/40 block font-medium uppercase tracking-widest">系统提示词 (System Prompt)</label>
                 <textarea v-model="newAgent.system_prompt" placeholder="设置Agent的行为指令..." rows="5" class="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white/80 outline-none focus:border-[#3B9BFF]/50 transition-all font-mono"></textarea>
+              </div>
+
+              <div class="space-y-4">
+                <label class="text-xs text-white/40 block font-medium uppercase tracking-widest">对话设置</label>
+                <div class="space-y-4">
+                  <div class="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/10 cursor-pointer" @click="newAgent.thinking_enabled = !newAgent.thinking_enabled">
+                    <span class="text-sm text-white/90">开启 Thinking 模式</span>
+                    <div class="w-10 h-6 rounded-full p-1 transition-all" :class="newAgent.thinking_enabled ? 'bg-[#3B9BFF]' : 'bg-white/10'">
+                      <div class="w-4 h-4 bg-white rounded-full transition-all" :class="newAgent.thinking_enabled ? 'translate-x-4' : 'translate-x-0'"></div>
+                    </div>
+                  </div>
+                  <div class="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/10 cursor-pointer" @click="newAgent.simplified_output = !newAgent.simplified_output">
+                    <span class="text-sm text-white/90">简化输出模式</span>
+                    <div class="w-10 h-6 rounded-full p-1 transition-all" :class="newAgent.simplified_output ? 'bg-[#3B9BFF]' : 'bg-white/10'">
+                      <div class="w-4 h-4 bg-white rounded-full transition-all" :class="newAgent.simplified_output ? 'translate-x-4' : 'translate-x-0'"></div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 

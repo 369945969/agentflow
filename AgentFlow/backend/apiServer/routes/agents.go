@@ -21,7 +21,7 @@ func RegisterAgentRoutes(r *gin.Engine) {
 }
 
 func getAgents(c *gin.Context) {
-	rows, err := db.DB.Query("SELECT id, name, description, model, system_prompt, created_at FROM agents ORDER BY created_at DESC")
+	rows, err := db.DB.Query("SELECT id, name, description, model, system_prompt, thinking_enabled, simplified_output, created_at FROM agents ORDER BY created_at DESC")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch agents"})
 		return
@@ -31,7 +31,7 @@ func getAgents(c *gin.Context) {
 	var agents []models.Agent
 	for rows.Next() {
 		var a models.Agent
-		if err := rows.Scan(&a.ID, &a.Name, &a.Description, &a.Model, &a.SystemPrompt, &a.CreatedAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.Name, &a.Description, &a.Model, &a.SystemPrompt, &a.ThinkingEnabled, &a.SimplifiedOutput, &a.CreatedAt); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to scan agent"})
 			return
 		}
@@ -49,8 +49,8 @@ func createAgent(c *gin.Context) {
 	}
 
 	id := uuid.New().String()
-	_, err := db.DB.Exec("INSERT INTO agents (id, name, description, model, system_prompt) VALUES (?, ?, ?, ?, ?)",
-		id, input.Name, input.Description, input.Model, input.SystemPrompt)
+	_, err := db.DB.Exec("INSERT INTO agents (id, name, description, model, system_prompt, thinking_enabled, simplified_output) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		id, input.Name, input.Description, input.Model, input.SystemPrompt, input.ThinkingEnabled, input.SimplifiedOutput)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create agent"})
 		return
@@ -63,8 +63,8 @@ func createAgent(c *gin.Context) {
 	}
 
 	var newAgent models.Agent
-	err = db.DB.QueryRow("SELECT id, name, description, model, system_prompt, created_at FROM agents WHERE id = ?", id).
-		Scan(&newAgent.ID, &newAgent.Name, &newAgent.Description, &newAgent.Model, &newAgent.SystemPrompt, &newAgent.CreatedAt)
+	err = db.DB.QueryRow("SELECT id, name, description, model, system_prompt, thinking_enabled, simplified_output, created_at FROM agents WHERE id = ?", id).
+		Scan(&newAgent.ID, &newAgent.Name, &newAgent.Description, &newAgent.Model, &newAgent.SystemPrompt, &newAgent.ThinkingEnabled, &newAgent.SimplifiedOutput, &newAgent.CreatedAt)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch new agent"})
 		return
@@ -93,8 +93,8 @@ func updateAgent(c *gin.Context) {
 		return
 	}
 
-	_, err := db.DB.Exec("UPDATE agents SET name = ?, description = ?, model = ?, system_prompt = ? WHERE id = ?",
-		input.Name, input.Description, input.Model, input.SystemPrompt, id)
+	_, err := db.DB.Exec("UPDATE agents SET name = ?, description = ?, model = ?, system_prompt = ?, thinking_enabled = ?, simplified_output = ? WHERE id = ?",
+		input.Name, input.Description, input.Model, input.SystemPrompt, input.ThinkingEnabled, input.SimplifiedOutput, id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update agent"})
 		return

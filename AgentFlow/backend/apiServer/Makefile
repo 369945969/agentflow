@@ -13,4 +13,4 @@ test:
 
 clean:
 	rm -f $(BINARY_NAME)
-	rm -rf ./data/agentflow.duckdb*
+	rm -f server.log

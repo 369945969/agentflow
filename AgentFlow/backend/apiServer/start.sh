@@ -2,8 +2,8 @@
 
 # Configuration
 PORT=3000
-BINARY_NAME="server"
-LOG_FILE="server.log"
+BINARY_NAME="api_server"
+LOG_FILE="api_server.log"
 
 echo "🔍 Checking for processes on port $PORT..."
 
