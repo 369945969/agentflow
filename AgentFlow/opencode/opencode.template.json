@@ -11,7 +11,7 @@
     ],
     "model": "deepseek-chat",
     "provider": {
-        "deepseek": {
+        "deepseek_backup": {
             "npm": "@ai-sdk/openai",
             "options": {
                 "baseURL": "https://api.deepseek.com/v1",
