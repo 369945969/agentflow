@@ -543,13 +543,15 @@ func (c *Client) readEvents(ctx context.Context, cancel context.CancelFunc, out 
 					SessionID: src.SessionID,
 					Timestamp: time.Now().UnixMilli(),
 					Payload: protocol.StreamChunkPayload{
-						Content:    delta,
-						IsThinking: isThinking,
-						IsFinal:    false,
+						Content:            delta,
+						IsThinking:         isThinking,
+						IsFinal:            false,
+						AssistantMessageID: mid,
 						Metadata: map[string]interface{}{
-							"provider_id": getString(raw, "properties", "info", "providerID"),
-							"model_id":    getString(raw, "properties", "info", "modelID"),
-							"part_type":   ptype,
+							"provider_id":          getString(raw, "properties", "info", "providerID"),
+							"model_id":             getString(raw, "properties", "info", "modelID"),
+							"part_type":            ptype,
+							"assistant_message_id": mid,
 						},
 					},
 				}
@@ -609,13 +611,15 @@ func (c *Client) readEvents(ctx context.Context, cancel context.CancelFunc, out 
 					SessionID: src.SessionID,
 					Timestamp: time.Now().UnixMilli(),
 					Payload: protocol.StreamChunkPayload{
-						Content:    delta,
-						IsThinking: isThinking,
-						IsFinal:    false,
+						Content:            delta,
+						IsThinking:         isThinking,
+						IsFinal:            false,
+						AssistantMessageID: mid,
 						Metadata: map[string]interface{}{
-							"provider_id": getString(raw, "properties", "info", "providerID"),
-							"model_id":    getString(raw, "properties", "info", "modelID"),
-							"part_type":   ptype,
+							"provider_id":          getString(raw, "properties", "info", "providerID"),
+							"model_id":             getString(raw, "properties", "info", "modelID"),
+							"part_type":            ptype,
+							"assistant_message_id": mid,
 						},
 					},
 				}
@@ -639,8 +643,10 @@ func (c *Client) readEvents(ctx context.Context, cancel context.CancelFunc, out 
 						SessionID: src.SessionID,
 						Timestamp: time.Now().UnixMilli(),
 						Payload: protocol.StreamEndPayload{
-							Content: textBuf.String(),
-							IsFinal: true,
+							Content:            textBuf.String(),
+							ThinkingContent:    reasoningBuf.String(),
+							IsFinal:            true,
+							AssistantMessageID: assistantMsgID,
 						},
 					}
 					cancel()
@@ -674,8 +680,10 @@ func (c *Client) readEvents(ctx context.Context, cancel context.CancelFunc, out 
 					SessionID: src.SessionID,
 					Timestamp: time.Now().UnixMilli(),
 					Payload: protocol.StreamEndPayload{
-						Content: textBuf.String(),
-						IsFinal: true,
+						Content:            textBuf.String(),
+						ThinkingContent:    reasoningBuf.String(),
+						IsFinal:            true,
+						AssistantMessageID: assistantMsgID,
 					},
 				}
 				cancel()

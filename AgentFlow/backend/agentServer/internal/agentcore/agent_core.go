@@ -8,7 +8,10 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -177,8 +180,8 @@ func (ac *AgentCore) Stream(ctx context.Context, execCtx ExecutionContext) {
 	if returnMode == "" {
 		returnMode = execCtx.EffectiveConfig.StreamMode
 	}
-	isBootstrapTurn := execCtx.Session.Type == "single" && strings.TrimSpace(execCtx.Session.UpstreamSessionID) == ""
 	allowChunks := execCtx.EffectiveConfig.StreamMode == "realtime" && returnMode != "final_only"
+	suppressThinkingOnInit := execCtx.Session.Type == "single" && strings.TrimSpace(execCtx.Session.UpstreamSessionID) == ""
 
 	send := func(m protocol.ServerMessage) {
 		if execCtx.Session.Type == "group" {
@@ -189,7 +192,7 @@ func (ac *AgentCore) Stream(ctx context.Context, execCtx ExecutionContext) {
 	}
 
 	if execCtx.Session.Type == "single" && execCtx.UserProfile.SimplifiedOutput {
-		rawFinal, upstreamSessionID, err := ac.streamWithSessionRecovery(ctx, execCtx, streamSendNone, "RAW_FINAL", false)
+		rawFinal, _, upstreamSessionID, err := ac.streamWithSessionRecovery(ctx, execCtx, streamSendNone, "RAW_FINAL", false, false)
 		if err != nil {
 			log.Printf("[agentcore] simplified raw stream error conn_id=%s message_id=%s err=%v", execCtx.ConnectionID, execCtx.Message.MessageID, err)
 			send(protocol.ServerMessage{
@@ -228,7 +231,7 @@ func (ac *AgentCore) Stream(ctx context.Context, execCtx ExecutionContext) {
 		// the user's chat context.
 		summaryCtx.Session.UpstreamSessionID = ""
 
-		summaryFinal, upstreamSessionID, err := ac.streamWithSessionRecovery(ctx, summaryCtx, streamSendFinalOnly, "SUMMARY", true)
+		summaryFinal, _, upstreamSessionID, err := ac.streamWithSessionRecovery(ctx, summaryCtx, streamSendFinalOnly, "SUMMARY", true, false)
 		if err != nil {
 			log.Printf("[agentcore] simplified summary error conn_id=%s message_id=%s err=%v", execCtx.ConnectionID, execCtx.Message.MessageID, err)
 			if shouldUseSummaryFallback(err) {
@@ -261,7 +264,7 @@ func (ac *AgentCore) Stream(ctx context.Context, execCtx ExecutionContext) {
 			retryCtx.SystemPrompt = ""
 			retryCtx.Session.UpstreamSessionID = ""
 
-			summaryFinal, _, err = ac.streamWithSessionRecovery(ctx, retryCtx, streamSendFinalOnly, "SUMMARY_RETRY", true)
+			summaryFinal, _, _, err = ac.streamWithSessionRecovery(ctx, retryCtx, streamSendFinalOnly, "SUMMARY_RETRY", true, false)
 			if err != nil {
 				log.Printf("[agentcore] simplified summary retry error conn_id=%s message_id=%s err=%v", execCtx.ConnectionID, execCtx.Message.MessageID, err)
 				if shouldUseSummaryFallback(err) {
@@ -303,10 +306,10 @@ func (ac *AgentCore) Stream(ctx context.Context, execCtx ExecutionContext) {
 	}
 
 	mode := streamSendFinalOnly
-	if allowChunks && !isBootstrapTurn {
+	if allowChunks {
 		mode = streamSendRealtime
 	}
-	final, upstreamSessionID, err := ac.streamWithSessionRecovery(ctx, execCtx, mode, "FINAL", true)
+	final, thinkingFinal, upstreamSessionID, err := ac.streamWithSessionRecovery(ctx, execCtx, mode, "FINAL", true, suppressThinkingOnInit)
 	if err != nil {
 		log.Printf("[agentcore] stream error conn_id=%s message_id=%s err=%v", execCtx.ConnectionID, execCtx.Message.MessageID, err)
 		_ = ac.logPersistence.AppendLog(execCtx.UserProfile.UserID, execCtx.Session.SessionID, "ERROR", err.Error())
@@ -328,7 +331,7 @@ func (ac *AgentCore) Stream(ctx context.Context, execCtx ExecutionContext) {
 		log.Printf("[agentcore] bootstrap echo detected conn_id=%s message_id=%s retrying without raw bootstrap block", execCtx.ConnectionID, execCtx.Message.MessageID)
 		retryCtx := execCtx
 		retryCtx.SystemPrompt = buildBootstrapReminder(execCtx)
-		final, upstreamSessionID, err = ac.streamWithSessionRecovery(ctx, retryCtx, streamSendFinalOnly, "FINAL_RETRY", true)
+		final, thinkingFinal, upstreamSessionID, err = ac.streamWithSessionRecovery(ctx, retryCtx, streamSendFinalOnly, "FINAL_RETRY", true, suppressThinkingOnInit)
 		if err == nil {
 			execCtx = ac.bindUpstreamSession(execCtx, upstreamSessionID)
 		}
@@ -341,6 +344,32 @@ func (ac *AgentCore) Stream(ctx context.Context, execCtx ExecutionContext) {
 		}
 	}
 
+	if execCtx.Session.Type == "single" && os.Getenv("AGENTFLOW_MARKDOWN_REPAIR") != "0" {
+		client := ac.getClient(execCtx.TargetAgent.Endpoint)
+		if shouldRepairMarkdown(final) {
+			if repaired, err := repairMarkdown(ctx, client, execCtx, final); err == nil && strings.TrimSpace(repaired) != "" {
+				final = repaired
+			}
+		}
+		if execCtx.EffectiveConfig.EnableThinking && strings.TrimSpace(thinkingFinal) != "" && shouldRepairMarkdown(thinkingFinal) {
+			if repaired, err := repairMarkdown(ctx, client, execCtx, thinkingFinal); err == nil && strings.TrimSpace(repaired) != "" {
+				thinkingFinal = repaired
+			}
+		}
+
+		if !execCtx.EffectiveConfig.EnableThinking && strings.TrimSpace(final) != "" {
+			s := &thinkSplitter{}
+			var b strings.Builder
+			for _, frag := range s.Split(final) {
+				if frag.isThinking {
+					continue
+				}
+				b.WriteString(frag.content)
+			}
+			final = b.String()
+		}
+	}
+
 	send(protocol.ServerMessage{
 		Type:      "stream_end",
 		MessageID: execCtx.Message.MessageID,
@@ -348,6 +377,12 @@ func (ac *AgentCore) Stream(ctx context.Context, execCtx ExecutionContext) {
 		Timestamp: time.Now().UnixMilli(),
 		Payload: protocol.StreamEndPayload{
 			Content: final,
+			ThinkingContent: func() string {
+				if execCtx.EffectiveConfig.EnableThinking {
+					return thinkingFinal
+				}
+				return ""
+			}(),
 			IsFinal: true,
 		},
 	})
@@ -702,16 +737,174 @@ func backendBaseURL(modelsAPIURL string) string {
 
 func buildSingleSystemPrompt(base string, enableThinking bool) string {
 	base = strings.TrimSpace(base)
+	formatHint := strings.Join([]string{
+		"输出格式要求：",
+		"1. 使用标准 Markdown。",
+		"2. 标题独立成行，使用 '# ' / '## ' 等，并在 # 后保留一个空格。同时在这些符号的前面要跟上一个换行\n符号，与上面的消息换行隔开。",
+		"3. 列表每个要点独立成行：无序列表用 '- ' 开头；有序列表用 '1. ' 这种格式，并保留一个空格。同时在这些符号的前面要跟上一个换行\n符号，与上面的消息换行隔开。",
+		"4. 不要把多个要点用 '-' 连接写在同一行；每个要点必须换行写，要带上\n。",
+	}, "\n")
 	if base == "" {
 		if enableThinking {
-			return "请在回答中使用 <think>...</think> 包裹思考过程，然后输出最终答案。"
+			return "请在回答中使用 <think>...</think> 包裹思考过程，然后输出最终答案。\n\n" + formatHint
 		}
-		return "请直接输出最终答案，不要输出思考过程。"
+		return "请直接输出最终答案，不要输出思考过程。\n\n" + formatHint
 	}
 	if enableThinking {
-		return base + "\n\n请在回答中使用 <think>...</think> 包裹思考过程，然后输出最终答案。"
+		return base + "\n\n请在回答中使用 <think>...</think> 包裹思考过程，然后输出最终答案。\n\n" + formatHint
 	}
-	return base + "\n\n请直接输出最终答案，不要输出思考过程。"
+	return base + "\n\n请直接输出最终答案，不要输出思考过程。\n\n" + formatHint
+}
+
+var (
+	reHeadingNoSpace  = regexp.MustCompile(`(?m)^(#{1,6})(\S)`)
+	reNumberNoSpace   = regexp.MustCompile(`(?m)^(\s*\d+)\.(\S)`)
+	reDashNoSpace     = regexp.MustCompile(`(?m)^(\s*[-*+])(\S)`)
+	reInlineStuckNum  = regexp.MustCompile(`\d+\.[^\s\d]`)
+	reInlineStuckDash = regexp.MustCompile(`[^\n]-[\p{Han}A-Za-z0-9]`)
+)
+
+func shouldRepairMarkdown(text string) bool {
+	s := strings.TrimSpace(text)
+	if s == "" {
+		return false
+	}
+	if strings.Count(s, "\n") < 2 {
+		return true
+	}
+	if reHeadingNoSpace.MatchString(s) || reNumberNoSpace.MatchString(s) || reDashNoSpace.MatchString(s) {
+		return true
+	}
+	if reInlineStuckNum.MatchString(s) || reInlineStuckDash.MatchString(s) {
+		return true
+	}
+	return false
+}
+
+func looksLikeRepairMeta(out string) bool {
+	s := strings.TrimSpace(out)
+	if s == "" {
+		return true
+	}
+	lower := strings.ToLower(s)
+	if strings.Contains(lower, "markdown") && (strings.Contains(s, "已输出") || strings.Contains(s, "修复后") || strings.Contains(s, "修复后的")) {
+		return true
+	}
+	if strings.Contains(s, "不要输出") || strings.Contains(s, "只输出") {
+		return true
+	}
+	if strings.Contains(s, "<RAW>") || strings.Contains(s, "</RAW>") {
+		return true
+	}
+	return false
+}
+
+func isPlausibleRepair(raw string, out string) bool {
+	rawTrim := strings.TrimSpace(raw)
+	outTrim := strings.TrimSpace(out)
+	if outTrim == "" {
+		return false
+	}
+	if looksLikeRepairMeta(outTrim) {
+		return false
+	}
+	if len(outTrim) < 30 && len(rawTrim) > 200 {
+		return false
+	}
+	rawCompact := strings.Join(strings.Fields(rawTrim), " ")
+	outCompact := strings.Join(strings.Fields(outTrim), " ")
+	if rawCompact == "" || outCompact == "" {
+		return false
+	}
+	sampleLen := 0
+	for _, r := range rawCompact {
+		if r == ' ' {
+			continue
+		}
+		sampleLen++
+		if sampleLen >= 16 {
+			break
+		}
+	}
+	if sampleLen == 0 {
+		return false
+	}
+	sample := []rune(rawCompact)
+	if len(sample) > 16 {
+		sample = sample[:16]
+	}
+	if !strings.Contains(outCompact, string(sample)) && len(outTrim) < len(rawTrim)/2 {
+		return false
+	}
+	return true
+}
+
+func repairMarkdown(ctx context.Context, client *opencode.Client, execCtx ExecutionContext, raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return raw, nil
+	}
+
+	prompt := strings.Join([]string{
+		"请仅对下面内容做 Markdown 版式修复：补全必要的换行、列表标记空格（如 '1. '、'- '）、标题 '# ' 空格、代码块围栏等。",
+		"如果存在标题（例如 '#二、根因分析图'）或代码块围栏（```）紧贴在上一段末尾的情况，需要补齐换行，让它们独立成行。",
+		"如果存在 Mermaid 图：请确保围栏为 ```mermaid 并且 Mermaid 内容从下一行开始。",
+		"如果原文使用了 ```mermaidgraph 或围栏后紧跟 'TD/LR/RL/BT' 这类方向，请修复为标准 Mermaid（例如 'graph TD ...' 或 'flowchart TD ...'）。",
+		"要求：不得改写任何词句、不得新增内容、不得删除内容、不得总结。",
+		"只输出修复后的 Markdown 正文，不要输出额外解释。",
+		"禁止输出诸如“修复后的Markdown正文已输出。”之类的提示语。",
+		"",
+		"<RAW>",
+		raw,
+		"</RAW>",
+	}, "\n")
+
+	req := execCtx.Message
+	req.MessageID = fmt.Sprintf("%s_fmt_%d", execCtx.Message.MessageID, time.Now().UnixNano())
+	req.Content.Text = prompt
+	req.Metadata.RequiredSkills = nil
+	req.Metadata.OverrideConfig = &protocol.UserInteractionConfig{
+		StreamMode:     "final_only",
+		EnableThinking: false,
+		ReturnStrategy: protocol.ReturnStrategy{Type: "final_only"},
+		TimeoutMs:      15000,
+		MaxRetries:     0,
+	}
+
+	_, streamCh, errCh, err := client.Stream(ctx, req, "")
+	if err != nil {
+		return raw, err
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return raw, ctx.Err()
+		case e, ok := <-errCh:
+			if !ok {
+				continue
+			}
+			if e != nil {
+				return raw, e
+			}
+		case ev, ok := <-streamCh:
+			if !ok {
+				return raw, fmt.Errorf("format stream closed")
+			}
+			if ev.Type != "stream_end" {
+				continue
+			}
+			endPayload, _ := ev.Payload.(protocol.StreamEndPayload)
+			out := strings.TrimSpace(endPayload.Content)
+			if out == "" {
+				return raw, nil
+			}
+			if !isPlausibleRepair(raw, out) {
+				return raw, nil
+			}
+			return out, nil
+		}
+	}
 }
 
 func buildSummaryRequest(execCtx ExecutionContext, rawFinal string, useSummarizeSkill bool) string {
@@ -978,6 +1171,50 @@ func looksLikeUserEcho(output string, userText string) bool {
 	return false
 }
 
+func stripUserEchoPrefix(content string, userText string) (string, bool) {
+	userText = strings.TrimSpace(userText)
+	if userText == "" {
+		return content, false
+	}
+
+	leadingTrimmed := strings.TrimLeft(content, " \t\r\n")
+	if !strings.HasPrefix(leadingTrimmed, userText) {
+		return content, false
+	}
+
+	rest := leadingTrimmed[len(userText):]
+	if rest != "" {
+		next := rest[:1]
+		isCJK := next >= "\u4e00" && next <= "\u9fff"
+		isPunct := strings.ContainsAny(next, "，。！？、；：,.!?;:（）()【】［］[]「」『』《》〈〉")
+		isWS := strings.HasPrefix(rest, " ") || strings.HasPrefix(rest, "\n") || strings.HasPrefix(rest, "\t") || strings.HasPrefix(rest, "\r")
+		if !isWS && !isCJK && !isPunct {
+			return content, false
+		}
+	}
+
+	cleaned := strings.TrimLeft(rest, " \t")
+	return cleaned, true
+}
+
+func dumpSnippet(s string, max int) string {
+	if max <= 0 {
+		max = 1200
+	}
+	if len(s) <= max {
+		return s
+	}
+	head := max / 2
+	tail := max - head
+	if head < 1 {
+		head = 1
+	}
+	if tail < 1 {
+		tail = 1
+	}
+	return s[:head] + "\n...[truncated]...\n" + s[len(s)-tail:]
+}
+
 type streamSendMode int
 
 const (
@@ -1057,18 +1294,20 @@ func suffixCarryLen(s string, tokens ...string) int {
 	return max
 }
 
-func (ac *AgentCore) streamOnce(ctx context.Context, execCtx ExecutionContext, mode streamSendMode, finalLogType string, finalize bool) (string, string, error) {
+func (ac *AgentCore) streamOnce(ctx context.Context, execCtx ExecutionContext, mode streamSendMode, finalLogType string, finalize bool, suppressThinking bool) (string, string, string, error) {
 	reqMsg := execCtx.Message
+	bootstrapInjected := false
 	if strings.TrimSpace(execCtx.Session.UpstreamSessionID) == "" {
 		if bootstrap := buildSessionBootstrap(execCtx); bootstrap != "" {
 			reqMsg.Content.Text = bootstrap + "\n\n[用户本轮消息]\n" + reqMsg.Content.Text
+			bootstrapInjected = true
 		}
 	}
 
 	client := ac.getClient(execCtx.TargetAgent.Endpoint)
 	upstreamSessionID, streamCh, errCh, err := client.Stream(ctx, reqMsg, execCtx.Session.UpstreamSessionID)
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 	log.Printf("[agentcore] upstream stream opened conn_id=%s message_id=%s endpoint=%s", execCtx.ConnectionID, execCtx.Message.MessageID, execCtx.TargetAgent.Endpoint)
 
@@ -1085,13 +1324,78 @@ func (ac *AgentCore) streamOnce(ctx context.Context, execCtx ExecutionContext, m
 
 	splitter := &thinkSplitter{}
 	var visible strings.Builder
+	var thinking strings.Builder
 	var streamOpen = true
 	var errOpen = true
+	userText := execCtx.Message.Content.Text
+	stripEchoDone := false
+	bootstrapCarry := ""
+	bootstrapStripping := false
+	bootstrapTokens := []string{
+		"[会话初始化资料]",
+		"[角色与行为规范]",
+		"[角色定位]",
+		"[工作原则]",
+		"[数字员工专属规范]",
+		"[回答要求]",
+		"[用户本轮消息]",
+		"Project Knowledge:",
+		"以上内容仅用于初始化本次新会话的角色和上下文",
+	}
+	filterBootstrapEcho := func(s string) string {
+		if !bootstrapInjected || s == "" {
+			return s
+		}
+		combined := bootstrapCarry + s
+		bootstrapCarry = ""
+		if carryLen := suffixCarryLen(combined, bootstrapTokens...); carryLen > 0 {
+			bootstrapCarry = combined[len(combined)-carryLen:]
+			combined = combined[:len(combined)-carryLen]
+		}
+
+		marker := "[用户本轮消息]"
+		hasAnyMarker := false
+		for _, tok := range bootstrapTokens {
+			if strings.Contains(combined, tok) {
+				hasAnyMarker = true
+				break
+			}
+		}
+		if hasAnyMarker {
+			bootstrapStripping = true
+		}
+
+		if bootstrapStripping {
+			if idx := strings.Index(combined, marker); idx >= 0 {
+				combined = combined[idx+len(marker):]
+				combined = strings.TrimLeft(combined, "\r\n")
+				bootstrapStripping = false
+				if cleaned, ok := stripUserEchoPrefix(combined, userText); ok {
+					stripEchoDone = true
+					combined = cleaned
+				}
+				return combined
+			}
+			return ""
+		}
+		return combined
+	}
+	debugNewlines := os.Getenv("AGENTFLOW_DEBUG_NEWLINES") == "1"
+	debugDump := os.Getenv("AGENTFLOW_DEBUG_STREAM_DUMP") == "1"
+	assistantMessageID := ""
+	dumpMax := 0
+	if debugDump {
+		if v := strings.TrimSpace(os.Getenv("AGENTFLOW_DEBUG_STREAM_DUMP_MAX")); v != "" {
+			if n, err := strconv.Atoi(v); err == nil {
+				dumpMax = n
+			}
+		}
+	}
 
 	for streamOpen || errOpen {
 		select {
 		case <-ctx.Done():
-			return "", upstreamSessionID, ctx.Err()
+			return "", "", upstreamSessionID, ctx.Err()
 		case err, ok := <-errCh:
 			if !ok {
 				errOpen = false
@@ -1099,7 +1403,7 @@ func (ac *AgentCore) streamOnce(ctx context.Context, execCtx ExecutionContext, m
 			}
 			if err != nil {
 				log.Printf("[agentcore] upstream error conn_id=%s message_id=%s err=%v", execCtx.ConnectionID, execCtx.Message.MessageID, err)
-				return "", upstreamSessionID, err
+				return "", "", upstreamSessionID, err
 			}
 		case ev, ok := <-streamCh:
 			if !ok {
@@ -1110,7 +1414,16 @@ func (ac *AgentCore) streamOnce(ctx context.Context, execCtx ExecutionContext, m
 			switch ev.Type {
 			case "stream_chunk":
 				payload, _ := ev.Payload.(protocol.StreamChunkPayload)
-				log.Printf("[agentcore] upstream chunk conn_id=%s message_id=%s len=%d is_thinking=%t", execCtx.ConnectionID, execCtx.Message.MessageID, len(payload.Content), payload.IsThinking)
+				if payload.AssistantMessageID != "" {
+					assistantMessageID = payload.AssistantMessageID
+				}
+				log.Printf("[agentcore] upstream chunk conn_id=%s message_id=%s assistant_message_id=%s len=%d is_thinking=%t", execCtx.ConnectionID, execCtx.Message.MessageID, payload.AssistantMessageID, len(payload.Content), payload.IsThinking)
+				if debugNewlines {
+					log.Printf("[agentcore] upstream chunk raw_newlines conn_id=%s message_id=%s is_thinking=%t newlines=%d", execCtx.ConnectionID, execCtx.Message.MessageID, payload.IsThinking, strings.Count(payload.Content, "\n"))
+				}
+				if debugDump {
+					log.Printf("[agentcore] upstream chunk raw_dump conn_id=%s message_id=%s assistant_message_id=%s is_thinking=%t content=%q", execCtx.ConnectionID, execCtx.Message.MessageID, payload.AssistantMessageID, payload.IsThinking, dumpSnippet(payload.Content, dumpMax))
+				}
 				var frags []chunkFragment
 				if payload.IsThinking {
 					frags = []chunkFragment{{content: payload.Content, isThinking: true}}
@@ -1121,14 +1434,34 @@ func (ac *AgentCore) streamOnce(ctx context.Context, execCtx ExecutionContext, m
 					if frag.content == "" {
 						continue
 					}
+					frag.content = filterBootstrapEcho(frag.content)
+					if frag.content == "" {
+						continue
+					}
+					if !frag.isThinking && !stripEchoDone {
+						if cleaned, ok := stripUserEchoPrefix(frag.content, userText); ok {
+							stripEchoDone = true
+							frag.content = cleaned
+							if frag.content == "" {
+								continue
+							}
+						}
+					}
 					if frag.isThinking {
+						thinking.WriteString(frag.content)
 						_ = ac.logPersistence.AppendLog(execCtx.UserProfile.UserID, execCtx.Session.SessionID, "THINKING", frag.content)
 					} else {
 						visible.WriteString(frag.content)
 						_ = ac.logPersistence.AppendLog(execCtx.UserProfile.UserID, execCtx.Session.SessionID, "CHUNK", frag.content)
 					}
 
-					if mode == streamSendRealtime && (!frag.isThinking || execCtx.EffectiveConfig.EnableThinking) {
+					if mode == streamSendRealtime && (!frag.isThinking || (execCtx.EffectiveConfig.EnableThinking && !suppressThinking)) {
+						if debugNewlines {
+							log.Printf("[agentcore] chunk newline_stats conn_id=%s message_id=%s is_thinking=%t chars=%d newlines=%d", execCtx.ConnectionID, execCtx.Message.MessageID, frag.isThinking, len(frag.content), strings.Count(frag.content, "\n"))
+						}
+						if debugDump {
+							log.Printf("[agentcore] chunk dump conn_id=%s message_id=%s assistant_message_id=%s is_thinking=%t content=%q", execCtx.ConnectionID, execCtx.Message.MessageID, payload.AssistantMessageID, frag.isThinking, dumpSnippet(frag.content, dumpMax))
+						}
 						send(protocol.ServerMessage{
 							Type:      "stream_chunk",
 							MessageID: execCtx.Message.MessageID,
@@ -1144,19 +1477,69 @@ func (ac *AgentCore) streamOnce(ctx context.Context, execCtx ExecutionContext, m
 					}
 				}
 			case "stream_end":
+				endPayload, _ := ev.Payload.(protocol.StreamEndPayload)
+				if endPayload.AssistantMessageID != "" {
+					assistantMessageID = endPayload.AssistantMessageID
+				}
 				final := visible.String()
-				log.Printf("[agentcore] upstream end conn_id=%s message_id=%s final_len=%d", execCtx.ConnectionID, execCtx.Message.MessageID, len(final))
+				thinkingFinal := thinking.String()
+				upstreamFinal := endPayload.Content
+				upstreamThinking := endPayload.ThinkingContent
+				if !stripEchoDone {
+					if cleaned, ok := stripUserEchoPrefix(final, userText); ok {
+						final = cleaned
+					}
+				}
+				if upstreamFinal != "" {
+					upstreamSplitter := &thinkSplitter{}
+					var upstreamVisible strings.Builder
+					for _, frag := range upstreamSplitter.Split(upstreamFinal) {
+						if frag.isThinking {
+							continue
+						}
+						upstreamVisible.WriteString(frag.content)
+					}
+					upstreamVisibleText := upstreamVisible.String()
+					if !stripEchoDone {
+						if cleaned, ok := stripUserEchoPrefix(upstreamVisibleText, userText); ok {
+							upstreamVisibleText = cleaned
+						}
+					}
+
+					if upstreamVisibleText != "" && upstreamVisibleText != final && len(upstreamVisibleText) > len(final) && strings.HasPrefix(upstreamVisibleText, final) {
+						if debugDump {
+							log.Printf("[agentcore] end reconcile conn_id=%s message_id=%s assistant_message_id=%s builder_len=%d upstream_len=%d", execCtx.ConnectionID, execCtx.Message.MessageID, assistantMessageID, len(final), len(upstreamVisibleText))
+						}
+						final = upstreamVisibleText
+					}
+				}
+				if debugNewlines {
+					log.Printf("[agentcore] end newline_stats conn_id=%s message_id=%s chars=%d newlines=%d", execCtx.ConnectionID, execCtx.Message.MessageID, len(final), strings.Count(final, "\n"))
+				}
+				if debugDump {
+					log.Printf("[agentcore] end dump conn_id=%s message_id=%s assistant_message_id=%s content=%q", execCtx.ConnectionID, execCtx.Message.MessageID, assistantMessageID, dumpSnippet(final, dumpMax))
+				}
+				log.Printf("[agentcore] upstream end conn_id=%s message_id=%s assistant_message_id=%s final_len=%d", execCtx.ConnectionID, execCtx.Message.MessageID, assistantMessageID, len(final))
+
+				if !suppressThinking {
+					if upstreamThinking != "" && upstreamThinking != thinkingFinal && len(upstreamThinking) > len(thinkingFinal) && strings.HasPrefix(upstreamThinking, thinkingFinal) {
+						thinkingFinal = upstreamThinking
+					}
+				} else {
+					thinkingFinal = ""
+				}
+
 				if finalLogType != "" {
 					_ = ac.logPersistence.AppendLog(execCtx.UserProfile.UserID, execCtx.Session.SessionID, finalLogType, final)
 				}
 				if finalize {
 					_ = ac.logPersistence.FinalizeLog(execCtx.UserProfile.UserID, execCtx.Session.SessionID, len(final))
 				}
-				return final, upstreamSessionID, nil
+				return final, thinkingFinal, upstreamSessionID, nil
 			case "error":
 				payload, _ := ev.Payload.(protocol.ErrorPayload)
 				log.Printf("[agentcore] upstream returned error conn_id=%s message_id=%s code=%s message=%s", execCtx.ConnectionID, execCtx.Message.MessageID, payload.Code, payload.Message)
-				return "", upstreamSessionID, fmt.Errorf("%s", payload.Message)
+				return "", "", upstreamSessionID, fmt.Errorf("%s", payload.Message)
 			}
 		}
 	}
@@ -1168,16 +1551,19 @@ func (ac *AgentCore) streamOnce(ctx context.Context, execCtx ExecutionContext, m
 	if finalize {
 		_ = ac.logPersistence.FinalizeLog(execCtx.UserProfile.UserID, execCtx.Session.SessionID, len(final))
 	}
-	return final, upstreamSessionID, nil
+	if suppressThinking {
+		return final, "", upstreamSessionID, nil
+	}
+	return final, thinking.String(), upstreamSessionID, nil
 }
 
-func (ac *AgentCore) streamWithSessionRecovery(ctx context.Context, execCtx ExecutionContext, mode streamSendMode, finalLogType string, finalize bool) (string, string, error) {
-	final, upstreamSessionID, err := ac.streamOnce(ctx, execCtx, mode, finalLogType, finalize)
+func (ac *AgentCore) streamWithSessionRecovery(ctx context.Context, execCtx ExecutionContext, mode streamSendMode, finalLogType string, finalize bool, suppressThinking bool) (string, string, string, error) {
+	final, thinkingFinal, upstreamSessionID, err := ac.streamOnce(ctx, execCtx, mode, finalLogType, finalize, suppressThinking)
 	if err == nil {
-		return final, upstreamSessionID, nil
+		return final, thinkingFinal, upstreamSessionID, nil
 	}
 	if !shouldRecreateSession(err) {
-		return final, upstreamSessionID, err
+		return final, thinkingFinal, upstreamSessionID, err
 	}
 
 	log.Printf("[agentcore] upstream session recovery conn_id=%s message_id=%s old_upstream_session_id=%s err=%v", execCtx.ConnectionID, execCtx.Message.MessageID, execCtx.Session.UpstreamSessionID, err)
@@ -1187,7 +1573,7 @@ func (ac *AgentCore) streamWithSessionRecovery(ctx context.Context, execCtx Exec
 	if retryCtx.Session.Type == "single" {
 		retryMode = streamSendFinalOnly
 	}
-	return ac.streamOnce(ctx, retryCtx, retryMode, finalLogType, finalize)
+	return ac.streamOnce(ctx, retryCtx, retryMode, finalLogType, finalize, false)
 }
 
 func (ac *AgentCore) bindUpstreamSession(execCtx ExecutionContext, upstreamSessionID string) ExecutionContext {

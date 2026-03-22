@@ -445,15 +445,15 @@ onMounted(() => {
              </div>
            </div>
         </div>
-        <div class="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
-           <div class="flex flex-col items-center justify-center h-full text-white/30 text-sm">
+        <div class="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar text-[13px]">
+           <div class="flex flex-col items-center justify-center h-full text-white/30 text-[13px]">
              <iconify-icon icon="lucide:message-square" class="text-4xl mb-4"></iconify-icon>
              开始你的多人对话...
            </div>
         </div>
         <div class="p-6 border-t border-white/10 bg-white/5 backdrop-blur-md shrink-0">
           <div class="flex gap-4">
-            <textarea placeholder="输入消息..." rows="1" class="flex-1 bg-white/5 border border-white/10 rounded-xl p-3 text-sm text-white/90 outline-none focus:border-[#3B9BFF]/50 resize-none"></textarea>
+            <textarea placeholder="输入消息..." rows="1" class="flex-1 bg-white/5 border border-white/10 rounded-xl p-3 text-[13px] text-white/90 outline-none focus:border-[#3B9BFF]/50 resize-none"></textarea>
             <button class="w-12 h-12 bg-[#3B9BFF] rounded-xl flex items-center justify-center text-white shadow-[0_0_20px_rgba(59,155,255,0.3)]"><iconify-icon icon="lucide:send" class="text-xl"></iconify-icon></button>
           </div>
         </div>

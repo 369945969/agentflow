@@ -3,6 +3,209 @@ import { ref, computed, nextTick, onBeforeUnmount, onMounted, watch } from 'vue'
 import BaseLayout from '../components/BaseLayout.vue'
 import { API_BASE_URL, WEBSOCKET_URL } from '../config/api'
 import { getWebSocketInstance, type ServerMessage } from '../api/websocket'
+import 'highlight.js/styles/atom-one-dark.css'
+import { unified } from 'unified'
+import remarkParse from 'remark-parse'
+import remarkGfm from 'remark-gfm'
+import remarkBreaks from 'remark-breaks'
+import remarkRehype from 'remark-rehype'
+import rehypeHighlight from 'rehype-highlight'
+import rehypeStringify from 'rehype-stringify'
+import prettier from 'prettier/standalone'
+import prettierMarkdown from 'prettier/plugins/markdown'
+import mermaid from 'mermaid'
+
+const mdProcessor = unified()
+  .use(remarkParse)
+  .use(remarkGfm)
+  .use(remarkBreaks)
+  .use(remarkRehype, { allowDangerousHtml: false })
+  .use(rehypeHighlight, { detect: true, ignoreMissing: true })
+  .use(rehypeStringify)
+
+let mermaidInitialized = false
+let mermaidTimer: number | null = null
+const mermaidPreviewOpen = ref(false)
+const mermaidPreviewHtml = ref('')
+
+const openMermaidPreview = (html: string) => {
+  mermaidPreviewHtml.value = html || ''
+  mermaidPreviewOpen.value = true
+}
+
+const closeMermaidPreview = () => {
+  mermaidPreviewOpen.value = false
+  mermaidPreviewHtml.value = ''
+}
+
+const scheduleMermaidRender = () => {
+  if (typeof window === 'undefined') return
+  if (mermaidTimer) window.clearTimeout(mermaidTimer)
+  mermaidTimer = window.setTimeout(() => {
+    nextTick(() => {
+      const root = messageListRef.value
+      if (!root) return
+      const codeNodes = root.querySelectorAll('pre code')
+      codeNodes.forEach(code => {
+        const className = (code.getAttribute('class') || '').toLowerCase()
+        const isMermaidLang =
+          className.includes('language-mermaid') ||
+          className.includes('lang-mermaid') ||
+          className.includes('language-mermaidgraph') ||
+          className.includes('lang-mermaidgraph')
+        if (!isMermaidLang) return
+        const pre = code.parentElement
+        if (!pre || pre.tagName !== 'PRE') return
+        const anyPre = pre as HTMLElement
+        if (anyPre.dataset.mermaidDone === '1') return
+        anyPre.dataset.mermaidDone = '1'
+        const container = document.createElement('div')
+        container.className = 'mermaid'
+        let graphText = code.textContent || ''
+        const trimmed = graphText.trimStart()
+        if (trimmed.toLowerCase().startsWith('mermaidgraph')) {
+          graphText = trimmed.slice('mermaidgraph'.length).trimStart()
+        } else {
+          graphText = trimmed
+        }
+        if (/^(TD|LR|RL|BT)\b/.test(graphText)) {
+          graphText = `graph ${graphText}`
+        }
+        container.textContent = graphText
+        pre.replaceWith(container)
+      })
+
+      if (!mermaidInitialized) return
+      const nodes = root.querySelectorAll('.mermaid')
+      if (nodes.length === 0) return
+      try {
+        mermaid.run({ nodes: Array.from(nodes) as any })
+      } catch {
+      }
+
+      nodes.forEach(node => {
+        const el = node as HTMLElement
+        if (el.dataset.previewBound === '1') return
+        el.dataset.previewBound = '1'
+        el.style.cursor = 'zoom-in'
+        el.addEventListener('click', (e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          openMermaidPreview(el.innerHTML)
+        })
+      })
+    })
+  }, 60)
+}
+
+const normalizeMarkdown = (content: string) => {
+  if (!content) return ''
+  return String(content)
+}
+
+const sanitizeMarkdown = (content: string) => {
+  let text = String(content || '')
+  if (!text) return ''
+
+  text = text.replace(/\r\n/g, '\n')
+  const lines = text.split('\n')
+  const out: string[] = []
+  let inFence = false
+
+  const splitInlineMarkers = (line: string) => {
+    let s = line
+    s = s.replace(/([^\n])(```)/g, '$1\n\n```')
+    s = s.replace(/([^\n])(#{1,6})(?=[^\s#])/g, '$1\n\n$2')
+    s = s.replace(/([^\n])-(?=[\u4E00-\u9FFFA-Za-z0-9])/g, '$1\n-')
+    return s
+  }
+
+  for (const line of lines) {
+    const isFenceLine = line.trimStart().startsWith('```')
+    if (isFenceLine) {
+      inFence = !inFence
+      out.push(line)
+      continue
+    }
+    if (inFence) {
+      out.push(line)
+      continue
+    }
+
+    const expanded = splitInlineMarkers(line)
+    if (expanded.includes('\n')) {
+      expanded.split('\n').forEach(l => {
+        out.push(l)
+      })
+      continue
+    }
+
+    if (/^\s*\d+\./.test(line)) {
+      const segments: string[] = []
+      const re = /(\d+)\.(?=[^\d\s])/g
+      let lastIndex = 0
+      let match: RegExpExecArray | null
+      let seenFirst = false
+      while ((match = re.exec(line)) !== null) {
+        const index = match.index
+        if (!seenFirst) {
+          seenFirst = true
+          continue
+        }
+        segments.push(line.slice(lastIndex, index).trimEnd())
+        lastIndex = index
+      }
+      if (seenFirst && segments.length > 0) {
+        segments.push(line.slice(lastIndex).trim())
+        segments.forEach((seg, idx) => {
+          const fixed = seg.replace(/^(\s*)(\d+)\.(?=[^\d\s])/, '$1$2. ')
+          out.push(idx === 0 ? fixed : fixed.trimStart())
+        })
+        continue
+      }
+    }
+
+    out.push(line)
+  }
+
+  const normalized = out
+    .map(l => l.replace(/^(\s*[-*+])(\S)/, '$1 $2').replace(/^(\s*\d+)\.(\S)/, '$1. $2').replace(/^(#{1,6})(\S)/, '$1 $2'))
+    .join('\n')
+
+  return normalized
+}
+
+const formatMarkdown = (content: string) => {
+  const input = sanitizeMarkdown(normalizeMarkdown(content || ''))
+  if (!input) return ''
+  try {
+    const out = prettier.format(input, {
+      parser: 'markdown',
+      plugins: [prettierMarkdown],
+      proseWrap: 'preserve',
+      printWidth: 120
+    })
+    return typeof out === 'string' ? out : input
+  } catch {
+    return input
+  }
+}
+
+const renderMarkdown = (content: string, streaming = false) => {
+  const input = streaming ? normalizeMarkdown(content || '') : formatMarkdown(content || '')
+  try {
+    return String(mdProcessor.processSync(input))
+  } catch {
+    const esc: Record<string, string> = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;'
+    }
+    return `<pre class="hljs"><code>${input.replace(/[&<>"']/g, (s: string) => esc[s] || s)}</code></pre>`
+  }
+}
 
 // ========== Models ==========
 const models = ref<any[]>([])
@@ -60,9 +263,7 @@ const ws = getWebSocketInstance()
 const wsInitialized = ref(false)
 const messageListRef = ref<HTMLElement | null>(null)
 const thinkingViewports = new Map<string, HTMLElement>()
-const thinkingExpanded = ref<Record<string, boolean>>({})
 const shouldStickToBottom = ref(true)
-const pendingUserEcho = new Map<string, string>()
 const seenStreamEventKeys = new Map<string, number>()
 
 const rememberStreamEvent = (key: string) => {
@@ -82,6 +283,148 @@ const handleWsConnectionChange = (connected: boolean) => {
   console.log('[SinglePersonChat] WebSocket connection changed:', connected)
 }
 
+const STORAGE_KEY = 'agentflow.single_person_chat.v1'
+
+type StoredMessage = {
+  id: string
+  type: 'user' | 'agent'
+  content: string
+  timestamp: number
+  isThinking?: boolean
+  isFinal?: boolean
+  isStreaming?: boolean
+  isError?: boolean
+  streamKey?: string
+}
+
+type StoredConversation = {
+  sessionId?: string
+  messages: StoredMessage[]
+  updatedAt: number
+}
+
+type StoredState = {
+  users: Record<string, StoredConversation>
+}
+
+const safeParseJSON = (raw: string | null) => {
+  if (!raw) return null
+  try {
+    return JSON.parse(raw)
+  } catch {
+    return null
+  }
+}
+
+const readState = (): StoredState => {
+  if (typeof window === 'undefined') return { users: {} }
+  const parsed = safeParseJSON(window.localStorage.getItem(STORAGE_KEY))
+  if (!parsed || typeof parsed !== 'object') return { users: {} }
+  const users = (parsed as any).users
+  if (!users || typeof users !== 'object') return { users: {} }
+  return { users }
+}
+
+const writeState = (next: StoredState) => {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+}
+
+const sanitizeStoredMessages = (raw: any): StoredMessage[] => {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((m: any) => {
+      if (!m || typeof m !== 'object') return null
+      const id = typeof m.id === 'string' ? m.id : ''
+      const type = m.type === 'user' ? 'user' : (m.type === 'agent' ? 'agent' : null)
+      const content = typeof m.content === 'string' ? m.content : ''
+      const timestamp = typeof m.timestamp === 'number' ? m.timestamp : Date.now()
+      if (!id || !type) return null
+      return {
+        id,
+        type,
+        content,
+        timestamp,
+        isThinking: Boolean(m.isThinking),
+        isFinal: Boolean(m.isFinal),
+        isStreaming: false,
+        isError: Boolean(m.isError),
+        streamKey: typeof m.streamKey === 'string' ? m.streamKey : undefined
+      } satisfies StoredMessage
+    })
+    .filter(Boolean) as StoredMessage[]
+}
+
+const getConversation = (userId: string): StoredConversation | null => {
+  const state = readState()
+  const conv = state.users[userId]
+  if (!conv || typeof conv !== 'object') return null
+  return {
+    sessionId: typeof (conv as any).sessionId === 'string' ? (conv as any).sessionId : undefined,
+    messages: sanitizeStoredMessages((conv as any).messages),
+    updatedAt: typeof (conv as any).updatedAt === 'number' ? (conv as any).updatedAt : Date.now()
+  }
+}
+
+const setConversation = (userId: string, conv: Partial<StoredConversation>) => {
+  const state = readState()
+  const prev = state.users[userId] || { messages: [], updatedAt: Date.now() }
+  const next: StoredConversation = {
+    sessionId: conv.sessionId ?? (prev as any).sessionId,
+    messages: conv.messages ?? sanitizeStoredMessages((prev as any).messages),
+    updatedAt: Date.now()
+  }
+  state.users[userId] = next
+  writeState(state)
+}
+
+const createNewSessionId = () => {
+  return `sess_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
+}
+
+let persistTimer: number | null = null
+const schedulePersist = () => {
+  if (!selectedUserId.value) return
+  if (persistTimer) window.clearTimeout(persistTimer)
+  persistTimer = window.setTimeout(() => {
+    const userId = selectedUserId.value
+    if (!userId) return
+    const conv = getConversation(userId) || { messages: [], updatedAt: Date.now() }
+    const sanitized: StoredMessage[] = messages.value
+      .filter((m: any) => m && typeof m === 'object')
+      .map((m: any) => {
+        if (m.type === 'user') {
+          return {
+            id: String(m.id || ''),
+            type: 'user',
+            content: String(m.content || ''),
+            timestamp: Number(m.timestamp || Date.now())
+          } satisfies StoredMessage
+        }
+        if (m.type === 'agent') {
+          return {
+            id: String(m.id || ''),
+            type: 'agent',
+            content: String(m.content || ''),
+            timestamp: Number(m.timestamp || Date.now()),
+            isThinking: Boolean(m.isThinking),
+            isFinal: Boolean(m.isFinal),
+            isStreaming: false,
+            isError: Boolean(m.isError),
+            streamKey: typeof m.streamKey === 'string' ? m.streamKey : undefined
+          } satisfies StoredMessage
+        }
+        return null
+      })
+      .filter(Boolean) as StoredMessage[]
+
+    setConversation(userId, {
+      sessionId: conv.sessionId,
+      messages: sanitized.slice(-300)
+    })
+  }, 250)
+}
+
 const handleWsMessage = (message: ServerMessage) => {
   console.log('[SinglePersonChat] Received message:', message)
   if (message.type === 'stream_chunk' || message.type === 'stream_end') {
@@ -95,6 +438,8 @@ const handleWsMessage = (message: ServerMessage) => {
     }
     rememberStreamEvent(eventKey)
     upsertAgentMessage(message)
+    scheduleMermaidRender()
+    schedulePersist()
     return
   }
   if (message.type === 'error') {
@@ -113,6 +458,16 @@ const handleWsMessage = (message: ServerMessage) => {
     if (shouldStickToBottom.value) {
       scrollMessagesToBottom(true)
     }
+
+    const maybeSessionError = typeof payload?.message === 'string' ? payload.message : ''
+    const code = typeof payload?.code === 'string' ? payload.code : ''
+    const isSessionInvalid = code === 'session_error' || /\bNot Found\b/i.test(maybeSessionError)
+    if (isSessionInvalid && selectedUserId.value) {
+      const newSessionId = createNewSessionId()
+      ws.setSession(newSessionId)
+      setConversation(selectedUserId.value, { sessionId: newSessionId })
+    }
+    schedulePersist()
   }
 }
 
@@ -130,26 +485,6 @@ const stripMemoryLines = (text: string) => {
       return true
     })
     .join('\n')
-}
-
-const stripLeadingUserEcho = (messageId: string | undefined, text: string) => {
-  if (!messageId) return text
-  const userText = pendingUserEcho.get(messageId)
-  if (!userText) return text
-  const needle = userText.trim()
-  if (!needle) {
-    pendingUserEcho.delete(messageId)
-    return text
-  }
-
-  const candidate = trimLeadingBlankLines(text)
-  if (!candidate.startsWith(needle)) return text
-
-  const rest = candidate.slice(needle.length)
-  if (rest !== '' && !/^\s/.test(rest)) return text
-
-  const cleaned = trimLeadingBlankLines(rest)
-  return cleaned
 }
 
 const scrollMessagesToBottom = (smooth = false) => {
@@ -170,30 +505,11 @@ const handleMessageListScroll = () => {
   shouldStickToBottom.value = distanceFromBottom < 80
 }
 
-const isThinkingExpanded = (streamKey: string) => Boolean(thinkingExpanded.value[streamKey])
-
 const hasMeaningfulThinking = (message: any) => {
   if (!message) return false
   const content = typeof message.content === 'string' ? message.content.trim() : ''
   if (!content) return false
   return !/^(\.{3}|…+)$/.test(content)
-}
-
-const toggleThinkingExpanded = (streamKey: string) => {
-  thinkingExpanded.value = {
-    ...thinkingExpanded.value,
-    [streamKey]: !thinkingExpanded.value[streamKey]
-  }
-  scrollThinkingViewport(streamKey)
-}
-
-const setThinkingViewport = (streamKey: string, el: any) => {
-  if (el instanceof HTMLElement) {
-    thinkingViewports.set(streamKey, el)
-    el.scrollTop = el.scrollHeight
-    return
-  }
-  thinkingViewports.delete(streamKey)
 }
 
 const scrollThinkingViewport = (streamKey: string) => {
@@ -212,15 +528,11 @@ const upsertAgentMessage = (message: ServerMessage) => {
   if (!payload || typeof payload !== 'object') return
 
   const isThinking = Boolean(payload.is_thinking)
-  const messageId = message.message_id || ''
   const streamKey = `${message.message_id || 'unknown'}:${isThinking ? 'thinking' : 'answer'}`
   const existing = messages.value.find((item: any) => item.type === 'agent' && item.streamKey === streamKey)
 
   if (message.type === 'stream_chunk') {
     let chunk = stripMemoryLines(payload.content || '')
-    if (!isThinking) {
-      chunk = stripLeadingUserEcho(messageId, chunk)
-    }
     if (!chunk && !existing) return
     if (existing) {
       existing.timestamp = message.timestamp || Date.now()
@@ -261,15 +573,31 @@ const upsertAgentMessage = (message: ServerMessage) => {
   const answerKey = `${message.message_id || 'unknown'}:answer`
   const thinkingKey = `${message.message_id || 'unknown'}:thinking`
   const thinkingMessage = messages.value.find((item: any) => item.type === 'agent' && item.streamKey === thinkingKey)
+  const thinkingContent = typeof (payload as any).thinking_content === 'string' ? (payload as any).thinking_content : ''
   if (thinkingMessage) {
     thinkingMessage.isStreaming = false
+    if (thinkingContent) {
+      thinkingMessage.content = trimTrailingBlankLines(trimLeadingBlankLines(stripMemoryLines(thinkingContent)))
+      thinkingMessage.isThinking = true
+      thinkingMessage.isFinal = true
+    }
     scrollThinkingViewport(thinkingKey)
+  } else if (thinkingContent) {
+    messages.value.push({
+      id: thinkingKey,
+      streamKey: thinkingKey,
+      type: 'agent',
+      content: trimTrailingBlankLines(trimLeadingBlankLines(stripMemoryLines(thinkingContent))),
+      isThinking: true,
+      isFinal: true,
+      isStreaming: false,
+      timestamp: message.timestamp || Date.now()
+    })
   }
   const finalExisting = messages.value.find((item: any) => item.type === 'agent' && item.streamKey === answerKey)
   const finalContent = stripMemoryLines(payload.content || '')
   if (finalExisting) {
     finalExisting.content = trimTrailingBlankLines(trimLeadingBlankLines(stripMemoryLines(finalContent || finalExisting.content || '')))
-    finalExisting.content = stripLeadingUserEcho(messageId, finalExisting.content)
     finalExisting.timestamp = message.timestamp || Date.now()
     finalExisting.isThinking = false
     finalExisting.isFinal = true
@@ -277,7 +605,6 @@ const upsertAgentMessage = (message: ServerMessage) => {
     if (shouldStickToBottom.value) {
       scrollMessagesToBottom(true)
     }
-    if (messageId) pendingUserEcho.delete(messageId)
     return
   }
 
@@ -285,7 +612,7 @@ const upsertAgentMessage = (message: ServerMessage) => {
     id: answerKey,
     streamKey: answerKey,
     type: 'agent',
-    content: stripLeadingUserEcho(messageId, trimTrailingBlankLines(trimLeadingBlankLines(stripMemoryLines(finalContent || '')))),
+    content: trimTrailingBlankLines(trimLeadingBlankLines(stripMemoryLines(finalContent || ''))),
     isThinking: false,
     isFinal: true,
     isStreaming: false,
@@ -294,7 +621,6 @@ const upsertAgentMessage = (message: ServerMessage) => {
   if (shouldStickToBottom.value) {
     scrollMessagesToBottom(true)
   }
-  if (messageId) pendingUserEcho.delete(messageId)
 }
 
 // Update agent settings in database
@@ -349,13 +675,29 @@ const setupWebSocket = () => {
   }
 }
 
+const clearChatHistory = () => {
+  const userId = selectedUserId.value
+  if (!userId) return
+  messages.value = []
+  const conv = getConversation(userId)
+  setConversation(userId, { sessionId: conv?.sessionId, messages: [] })
+  shouldStickToBottom.value = true
+}
+
 const sendMessage = () => {
   const text = inputText.value.trim()
   if (!text || !selectedUserId.value) return
+  const userId = selectedUserId.value
+  const existing = getConversation(userId)
+  const sessionId = existing?.sessionId || createNewSessionId()
+  if (!existing?.sessionId) {
+    setConversation(userId, { sessionId })
+  }
+  ws.setSession(sessionId)
   console.log('[SinglePersonChat] sendMessage called', {
-    selectedUserId: selectedUserId.value,
+    selectedUserId: userId,
     isConnected: ws.getConnectionStatus(),
-    sessionId: ws.getSessionId(),
+    sessionId,
     textLength: text.length
   })
   
@@ -371,13 +713,10 @@ const sendMessage = () => {
   scrollMessagesToBottom(true)
   
   // Send via WebSocket
-  const messageId = ws.sendText(text, selectedUserId.value)
-  if (messageId) {
-    pendingUserEcho.set(messageId, text)
-  }
-
+  const messageId = ws.sendText(text, userId, sessionId)
   console.log('[SinglePersonChat] Message dispatched with ID:', messageId)
   inputText.value = ''
+  schedulePersist()
 }
 
 const handleTextareaKeydown = (event: KeyboardEvent) => {
@@ -524,16 +863,45 @@ watch(selectedUserId, () => {
     
     // Update WebSocket user
     ws.setUser(user.id)
-    ws.clearSession()
+    const conv = getConversation(user.id)
+    if (conv?.sessionId) {
+      ws.setSession(conv.sessionId)
+    } else {
+      ws.clearSession()
+    }
     console.log('[SinglePersonChat] Selected user changed', {
       userId: user.id,
       userName: user.name
     })
     
-    // Clear previous messages when switching users
-    messages.value = []
-    thinkingExpanded.value = {}
+    seenStreamEventKeys.clear()
+
+    const restored = conv?.messages || []
+    messages.value = restored.map((m: StoredMessage) => {
+      if (m.type === 'user') {
+        return {
+          id: m.id,
+          type: 'user',
+          content: m.content,
+          timestamp: m.timestamp
+        }
+      }
+      return {
+        id: m.id,
+        streamKey: m.streamKey || m.id,
+        type: 'agent',
+        content: m.content,
+        isThinking: Boolean(m.isThinking),
+        isFinal: Boolean(m.isFinal),
+        isStreaming: false,
+        isError: Boolean(m.isError),
+        timestamp: m.timestamp
+      }
+    })
     shouldStickToBottom.value = true
+    nextTick(() => scrollMessagesToBottom())
+    scheduleMermaidRender()
+    schedulePersist()
   }
   
   // Ensure WebSocket is connected and set up
@@ -547,9 +915,19 @@ watch([thinkingEnabled, simplifiedOutput], () => {
 
 onMounted(() => {
   console.log('[SinglePersonChat] mounted', { websocketUrl: WEBSOCKET_URL })
+  if (!mermaidInitialized) {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: 'dark',
+      securityLevel: 'strict'
+    })
+    mermaidInitialized = true
+  }
   fetchModels()
   fetchUsers()
   setupWebSocket()
+  nextTick(() => scrollMessagesToBottom())
+  scheduleMermaidRender()
 })
 
 onBeforeUnmount(() => {
@@ -642,11 +1020,18 @@ onBeforeUnmount(() => {
       <!-- Main Chat Area -->
       <main class="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
         <div class="border-b border-white/10 bg-white/5 backdrop-blur-md shrink-0">
-          <div class="h-16 flex items-center px-6">
+          <div class="h-16 flex items-center justify-between px-6">
             <div class="flex items-center gap-3">
               <div class="w-2 h-2 rounded-full" :class="isConnected ? 'bg-green-500' : 'bg-red-500'" :title="isConnected ? '已连接到服务器' : '未连接'"></div>
               <h2 class="text-lg font-semibold text-white/95">{{ activeUserName }}</h2>
             </div>
+            <button
+              class="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/70 hover:bg-white/10"
+              @click="clearChatHistory"
+            >
+              <iconify-icon icon="lucide:trash-2" class="text-base"></iconify-icon>
+              清空记录
+            </button>
           </div>
         </div>
         <div
@@ -665,7 +1050,7 @@ onBeforeUnmount(() => {
               class="flex"
               :class="group.kind === 'single' && group.message.type === 'user' ? 'justify-end' : 'justify-start'"
             >
-              <div v-if="group.kind === 'assistant'" class="w-full max-w-[760px] space-y-3">
+                <div v-if="group.kind === 'assistant'" class="w-full max-w-[760px] space-y-3 text-[13px]">
                 <!-- Original Message Container -->
                 <div class="max-w-[760px] rounded-2xl p-4 border bg-white/10 text-white/90 border-white/10">
                   <div class="mb-3 flex items-center gap-2">
@@ -678,12 +1063,12 @@ onBeforeUnmount(() => {
                   </div>
                   
                   <!-- Merged Thinking and Reply -->
-                  <div v-if="group.thinking && hasMeaningfulThinking(group.thinking)" class="mb-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-xs text-amber-100/70">
-                    <div class="font-bold mb-1 flex items-center gap-2"><iconify-icon icon="lucide:brain-circuit"></iconify-icon>推理过程</div>
-                    <div class="whitespace-pre-wrap break-words">{{ group.thinking.content }}</div>
+                  <div v-if="group.thinking && hasMeaningfulThinking(group.thinking)" class="mb-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-100/70">
+                    <div class="font-bold mb-1 flex items-center gap-2 text-xs"><iconify-icon icon="lucide:brain-circuit"></iconify-icon>推理过程</div>
+                    <div class="markdown-body break-words text-[13px]" v-html="renderMarkdown(group.thinking.content, Boolean(group.thinking.isStreaming))"></div>
                   </div>
                   
-                  <div class="whitespace-pre-wrap break-words">{{ group.reply ? group.reply.content : '' }}</div>
+                  <div class="markdown-body break-words text-[13px]" v-html="renderMarkdown(group.reply ? group.reply.content : '', Boolean(group.reply?.isStreaming))"></div>
                   
                   <div v-if="group.reply?.isStreaming" class="mt-3 inline-flex items-center gap-2 text-xs opacity-70">
                     <span class="h-2 w-2 rounded-full bg-current animate-pulse"></span>
@@ -706,7 +1091,7 @@ onBeforeUnmount(() => {
                 </div>
                 
                 <!-- Original Message Container -->
-                <div class="max-w-[760px] rounded-2xl p-4 border bg-[#3B9BFF] text-white border-[#3B9BFF]">
+                <div class="max-w-[760px] rounded-2xl p-4 border bg-[#3B9BFF] text-white border-[#3B9BFF] text-[13px]">
                   <div class="whitespace-pre-wrap break-words">{{ group.message.content }}</div>
                   <div class="text-xs mt-2 opacity-60 text-right">{{ new Date(group.message.timestamp).toLocaleTimeString() }}</div>
                 </div>
@@ -714,7 +1099,7 @@ onBeforeUnmount(() => {
 
               <div
                 v-else
-                class="max-w-[760px] rounded-2xl p-4 border bg-red-500/10 text-red-50 border-red-400/30"
+                class="max-w-[760px] rounded-2xl p-4 border bg-red-500/10 text-red-50 border-red-400/30 text-[13px]"
               >
                 <div class="mb-2 inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-[11px] uppercase tracking-[0.18em] bg-red-400/15 text-red-200">
                   Error
@@ -778,6 +1163,23 @@ onBeforeUnmount(() => {
            </div>
          </div>
        </aside>
+    </div>
+    <div
+      v-if="mermaidPreviewOpen"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6"
+      @click="closeMermaidPreview"
+    >
+      <div class="relative w-full max-w-6xl max-h-[85vh] overflow-auto rounded-2xl border border-white/10 bg-[#0F1928] p-4" @click.stop>
+        <button
+          class="absolute right-3 top-3 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/70 hover:bg-white/10"
+          @click="closeMermaidPreview"
+        >
+          <iconify-icon icon="lucide:x" class="text-xl"></iconify-icon>
+        </button>
+        <div class="markdown-body">
+          <div class="mermaid" v-html="mermaidPreviewHtml"></div>
+        </div>
+      </div>
     </div>
   </BaseLayout>
 </template>
@@ -847,4 +1249,101 @@ onBeforeUnmount(() => {
   background: rgba(251, 191, 36, 0.28);
   border-radius: 9999px;
 }
+
+:deep(.markdown-body) {
+  line-height: 1.8;
+  word-break: break-word;
+  font-size: inherit;
+}
+
+:deep(.markdown-body p) {
+  margin: 0.6em 0;
+}
+
+:deep(.markdown-body h1),
+:deep(.markdown-body h2),
+:deep(.markdown-body h3),
+:deep(.markdown-body h4),
+:deep(.markdown-body h5),
+:deep(.markdown-body h6) {
+  margin: 0.9em 0 0.45em;
+  font-weight: 650;
+}
+
+:deep(.markdown-body h1) { font-size: 1.35rem; }
+:deep(.markdown-body h2) { font-size: 1.2rem; }
+:deep(.markdown-body h3) { font-size: 1.1rem; }
+:deep(.markdown-body h4) { font-size: 1.02rem; }
+:deep(.markdown-body h5) { font-size: 0.98rem; }
+:deep(.markdown-body h6) { font-size: 0.95rem; }
+
+:deep(.markdown-body ul),
+:deep(.markdown-body ol) {
+  margin: 0.5em 0 0.5em 1.1em;
+  padding-left: 1.1em;
+  list-style-position: outside;
+}
+
+:deep(.markdown-body ul) { list-style-type: disc; }
+:deep(.markdown-body ol) { list-style-type: decimal; }
+
+:deep(.markdown-body li) {
+  margin: 0.25em 0;
+}
+
+:deep(.markdown-body blockquote) {
+  margin: 0.8em 0;
+  padding: 0.5em 0.9em;
+  border-left: 3px solid rgba(59, 155, 255, 0.55);
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 0.75rem;
+}
+
+:deep(.markdown-body code) {
+  padding: 0.15em 0.35em;
+  border-radius: 0.4rem;
+  background: rgba(255, 255, 255, 0.08);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.9em;
+}
+
+:deep(.markdown-body pre) {
+  margin: 0.8em 0;
+  padding: 0.9em 1em;
+  border-radius: 0.9rem;
+  background: rgba(0, 0, 0, 0.35);
+  overflow: auto;
+}
+
+:deep(.markdown-body .mermaid) {
+  margin: 0.8em 0;
+  padding: 0.9em 1em;
+  border-radius: 0.9rem;
+  background: rgba(0, 0, 0, 0.25);
+  overflow: auto;
+}
+
+:deep(.markdown-body .mermaid svg) {
+  max-width: 100%;
+  height: auto;
+}
+
+:deep(.markdown-body pre code) {
+  padding: 0;
+  background: transparent;
+  font-size: 0.9em;
+}
+
+:deep(.markdown-body a) {
+  color: rgba(110, 200, 255, 1);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+:deep(.markdown-body hr) {
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  margin: 1em 0;
+}
+
 </style>
