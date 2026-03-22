@@ -666,69 +666,50 @@ onBeforeUnmount(() => {
               :class="group.kind === 'single' && group.message.type === 'user' ? 'justify-end' : 'justify-start'"
             >
               <div v-if="group.kind === 'assistant'" class="w-full max-w-[760px] space-y-3">
-                <div v-if="group.thinking && hasMeaningfulThinking(group.thinking)" class="w-full text-amber-50">
-                  <div class="rounded-2xl border border-amber-200/12 bg-amber-500/10 shadow-[0_12px_32px_rgba(251,191,36,0.08)]">
-                    <button
-                      type="button"
-                      class="flex w-full items-center justify-between gap-3 px-3 py-2 text-left"
-                      @click="toggleThinkingExpanded(group.thinking.streamKey)"
-                    >
-                      <div class="min-w-0 flex items-center gap-2">
-                        <span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-amber-300/14 text-amber-200">
-                          <iconify-icon icon="lucide:brain-circuit" class="text-sm"></iconify-icon>
-                        </span>
-                        <div class="min-w-0">
-                          <div class="flex items-center gap-2">
-                            <div class="text-[11px] font-semibold uppercase tracking-[0.22em] text-amber-200/90">Thinking</div>
-                            <span v-if="group.thinking.isStreaming" class="h-2 w-2 rounded-full bg-amber-200/80 animate-pulse"></span>
-                          </div>
-                          <div class="text-xs text-amber-50/60 break-words">
-                            {{ group.thinking.isStreaming ? '推理中（实时）' : '推理完成' }}
-                          </div>
-                        </div>
-                      </div>
-                      <div class="ml-3 flex shrink-0 items-center gap-2 text-amber-100/70">
-                        <span class="text-[11px]">{{ isThinkingExpanded(group.thinking.streamKey) ? '收起' : '展开' }}</span>
-                        <iconify-icon
-                          icon="lucide:chevron-down"
-                          class="text-base transition-transform duration-200"
-                          :class="isThinkingExpanded(group.thinking.streamKey) ? 'rotate-180' : ''"
-                        ></iconify-icon>
-                      </div>
-                    </button>
-                    <div
-                      :ref="el => setThinkingViewport(group.thinking.streamKey, el)"
-                      class="thinking-viewport w-full whitespace-pre-wrap break-words px-3 pb-3 text-sm leading-7 text-amber-50/88"
-                      :class="isThinkingExpanded(group.thinking.streamKey) ? 'thinking-viewport-expanded' : 'thinking-viewport-collapsed'"
-                    >{{ group.thinking.content || (group.thinking.isStreaming ? '思考中…' : '') }}</div>
+                <!-- Original Message Container -->
+                <div class="max-w-[760px] rounded-2xl p-4 border bg-white/10 text-white/90 border-white/10">
+                  <div class="mb-3 flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-lg bg-[#3B9BFF]/20 flex items-center justify-center text-[#3B9BFF] font-bold text-xs">
+                      {{ selectedUser ? selectedUser.name.charAt(0) : 'AI' }}
+                    </div>
+                    <span class="text-xs font-semibold text-white/80">
+                      {{ selectedUser ? selectedUser.name : 'AI 助手' }}
+                    </span>
                   </div>
-                </div>
-
-                <div
-                  v-if="group.reply"
-                  class="rounded-2xl p-4 border bg-white/10 text-white/90 border-white/10"
-                >
-                  <div class="mb-2 inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-[11px] uppercase tracking-[0.18em] bg-emerald-300/15 text-emerald-200">
-                    Reply
+                  
+                  <!-- Merged Thinking and Reply -->
+                  <div v-if="group.thinking && hasMeaningfulThinking(group.thinking)" class="mb-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-xs text-amber-100/70">
+                    <div class="font-bold mb-1 flex items-center gap-2"><iconify-icon icon="lucide:brain-circuit"></iconify-icon>推理过程</div>
+                    <div class="whitespace-pre-wrap break-words">{{ group.thinking.content }}</div>
                   </div>
-                  <div class="whitespace-pre-wrap break-words">{{ group.reply.content }}</div>
-                  <div
-                    v-if="group.reply.isStreaming"
-                    class="mt-3 inline-flex items-center gap-2 text-xs opacity-70"
-                  >
+                  
+                  <div class="whitespace-pre-wrap break-words">{{ group.reply ? group.reply.content : '' }}</div>
+                  
+                  <div v-if="group.reply?.isStreaming" class="mt-3 inline-flex items-center gap-2 text-xs opacity-70">
                     <span class="h-2 w-2 rounded-full bg-current animate-pulse"></span>
                     <span>生成中...</span>
                   </div>
-                  <div class="text-xs mt-2 opacity-60">{{ new Date(group.reply.timestamp).toLocaleTimeString() }}</div>
+                  <div class="text-xs mt-2 opacity-60">{{ new Date((group.reply || group.thinking).timestamp).toLocaleTimeString() }}</div>
                 </div>
               </div>
 
               <div
                 v-else-if="group.message.type === 'user'"
-                class="max-w-[760px] rounded-2xl p-4 border bg-[#3B9BFF] text-white border-[#3B9BFF]"
+                class="flex flex-row-reverse items-start gap-4 w-full"
               >
-                <div class="whitespace-pre-wrap break-words">{{ group.message.content }}</div>
-                <div class="text-xs mt-2 opacity-60">{{ new Date(group.message.timestamp).toLocaleTimeString() }}</div>
+                <!-- Avatar & Name -->
+                <div class="flex flex-col items-center gap-1 shrink-0">
+                  <div class="w-10 h-10 rounded-full bg-[#50C878]/20 flex items-center justify-center text-[#50C878]">
+                    <iconify-icon icon="lucide:user" class="text-xl"></iconify-icon>
+                  </div>
+                  <span class="text-[10px] text-white/40">Human</span>
+                </div>
+                
+                <!-- Original Message Container -->
+                <div class="max-w-[760px] rounded-2xl p-4 border bg-[#3B9BFF] text-white border-[#3B9BFF]">
+                  <div class="whitespace-pre-wrap break-words">{{ group.message.content }}</div>
+                  <div class="text-xs mt-2 opacity-60 text-right">{{ new Date(group.message.timestamp).toLocaleTimeString() }}</div>
+                </div>
               </div>
 
               <div
