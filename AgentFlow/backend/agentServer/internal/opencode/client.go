@@ -32,37 +32,43 @@ func NewClient(baseURL string, backendModelsURL string, httpClient *http.Client)
 	}
 }
 
-func (c *Client) Stream(ctx context.Context, msg protocol.Message) (<-chan protocol.ServerMessage, <-chan error) {
+func (c *Client) Stream(ctx context.Context, msg protocol.Message, upstreamSessionID string) (string, <-chan protocol.ServerMessage, <-chan error, error) {
 	out := make(chan protocol.ServerMessage, 32)
 	errCh := make(chan error, 1)
+
+	providers, err := c.fetchProviders(ctx)
+	if err != nil {
+		close(out)
+		close(errCh)
+		return "", out, errCh, err
+	}
+
+	backendModels, _ := c.fetchBackendModels(ctx)
+	selectedBackendModel := pickBackendModel(backendModels, msg.Metadata.ModelID)
+
+	providerID, modelID := resolveProviderModel(providers, selectedBackendModel)
+	if providerID == "" || modelID == "" {
+		providerID, modelID = fallbackProviderModel(providers)
+	}
+	if providerID == "" || modelID == "" {
+		close(out)
+		close(errCh)
+		return "", out, errCh, fmt.Errorf("OpenCode provider/model not found")
+	}
+
+	sessionID := strings.TrimSpace(upstreamSessionID)
+	if sessionID == "" {
+		sessionID, err = c.createSession(ctx)
+		if err != nil {
+			close(out)
+			close(errCh)
+			return "", out, errCh, err
+		}
+	}
 
 	go func() {
 		defer close(out)
 		defer close(errCh)
-
-		providers, err := c.fetchProviders(ctx)
-		if err != nil {
-			errCh <- err
-			return
-		}
-
-		backendModels, _ := c.fetchBackendModels(ctx)
-		selectedBackendModel := pickBackendModel(backendModels, msg.Metadata.ModelID)
-
-		providerID, modelID := resolveProviderModel(providers, selectedBackendModel)
-		if providerID == "" || modelID == "" {
-			providerID, modelID = fallbackProviderModel(providers)
-		}
-		if providerID == "" || modelID == "" {
-			errCh <- fmt.Errorf("OpenCode provider/model not found")
-			return
-		}
-
-		sessionID, err := c.createSession(ctx)
-		if err != nil {
-			errCh <- err
-			return
-		}
 
 		eventCtx, cancel := context.WithCancel(ctx)
 		defer cancel()
@@ -99,7 +105,7 @@ func (c *Client) Stream(ctx context.Context, msg protocol.Message) (<-chan proto
 		}
 	}()
 
-	return out, errCh
+	return sessionID, out, errCh, nil
 }
 
 type backendModel struct {
@@ -609,6 +615,21 @@ func (c *Client) readEvents(ctx context.Context, cancel context.CancelFunc, out 
 				}
 				if msg == "" {
 					msg = "OpenCode session.error"
+				}
+				if gotText && strings.EqualFold(strings.TrimSpace(msg), "Not Found") {
+					log.Printf("[opencode] session.error downgraded to final session_id=%s source_message_id=%s message=%s final_len=%d", sessionID, src.MessageID, msg, textBuf.Len())
+					out <- protocol.ServerMessage{
+						Type:      "stream_end",
+						MessageID: src.MessageID,
+						SessionID: src.SessionID,
+						Timestamp: time.Now().UnixMilli(),
+						Payload: protocol.StreamEndPayload{
+							Content: textBuf.String(),
+							IsFinal: true,
+						},
+					}
+					cancel()
+					return
 				}
 				out <- protocol.ServerMessage{
 					Type:      "error",

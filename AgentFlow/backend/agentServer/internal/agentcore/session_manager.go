@@ -7,15 +7,16 @@ import (
 )
 
 type Session struct {
-	SessionID   string
-	UserID      string
-	Type        string
-	Status      string
-	GroupInfo   *GroupInfo
-	LastAgentID string
-	CreatedAt   int64
-	UpdatedAt   int64
-	ExpiresAt   int64
+	SessionID         string
+	UserID            string
+	Type              string
+	Status            string
+	GroupInfo         *GroupInfo
+	LastAgentID       string
+	UpstreamSessionID string
+	CreatedAt         int64
+	UpdatedAt         int64
+	ExpiresAt         int64
 }
 
 type SessionManager struct {

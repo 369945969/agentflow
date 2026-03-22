@@ -8,9 +8,25 @@ type ExecutionContext struct {
 	UserProfile     UserProfile
 	ConnectionID    string
 	TargetAgent     SubAgentConfig
+	AgentProfile    *AgentSnapshot
 	RoleIdentity    *RoleIdentity
 	SystemPrompt    string
 	EffectiveConfig UserInteractionConfig
+}
+
+type AgentSnapshot struct {
+	ID           string
+	Name         string
+	Description  string
+	SystemPrompt string
+	Skills       []SkillSnapshot
+}
+
+type SkillSnapshot struct {
+	ID          string
+	Name        string
+	Type        string
+	Description string
 }
 
 type RoleIdentity struct {

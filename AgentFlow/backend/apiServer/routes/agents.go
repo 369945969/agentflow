@@ -5,6 +5,7 @@ import (
 	"apiServer/models"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -158,11 +159,28 @@ func updateAgent(c *gin.Context) {
 	}
 
 	// Update skills: delete old and insert new
-	tx.Exec("DELETE FROM agent_skills WHERE agent_id = ?", id)
+	if _, err := tx.Exec("DELETE FROM agent_skills WHERE agent_id = ?", id); err != nil {
+		tx.Rollback()
+		log.Printf("Failed to delete existing agent skills for agent %s: %v", id, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to clear existing agent skills"})
+		return
+	}
+
+	seenSkills := make(map[string]struct{}, len(input.Skills))
 	for _, skillID := range input.Skills {
-		_, err = tx.Exec("INSERT INTO agent_skills (agent_id, skill_id) VALUES (?, ?)", id, skillID)
+		skillID = strings.TrimSpace(skillID)
+		if skillID == "" {
+			continue
+		}
+		if _, exists := seenSkills[skillID]; exists {
+			continue
+		}
+		seenSkills[skillID] = struct{}{}
+
+		_, err = tx.Exec("INSERT OR IGNORE INTO agent_skills (agent_id, skill_id) VALUES (?, ?)", id, skillID)
 		if err != nil {
 			tx.Rollback()
+			log.Printf("Failed to insert agent skill for agent %s skill %s: %v", id, skillID, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update agent skills"})
 			return
 		}

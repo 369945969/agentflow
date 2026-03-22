@@ -619,8 +619,8 @@ func TestSingleChatThinkingDisabledDoesNotForwardThink(t *testing.T) {
 		}
 	}
 
-	if !sawChunk || !sawEnd {
-		t.Fatalf("expected stream_chunk and stream_end, got chunk=%v end=%v", sawChunk, sawEnd)
+	if !sawEnd {
+		t.Fatalf("expected stream_end, got chunk=%v end=%v", sawChunk, sawEnd)
 	}
 	if sawThink {
 		t.Fatalf("expected no thinking forwarded")

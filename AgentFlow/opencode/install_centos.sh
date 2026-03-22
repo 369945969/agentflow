@@ -4,10 +4,31 @@
 set -e
 
 PROJECT_ROOT=$(pwd)
+OPENCODE_TEMPLATE="$PROJECT_ROOT/opencode.template.json"
 PLUGIN_DIR="$HOME/.config/opencode/plugins/duckdb-model-router"
 DAYTONA_PLUGIN_DIR="$HOME/.config/opencode/plugins/daytona-sandbox"
 CONFIG_DIR="$HOME/.config/opencode"
 DATE_SUFFIX=$(date +%Y%m%d_%H%M%S)
+
+resolve_daytona_bin() {
+    local candidate
+    for candidate in "${DAYTONA_BIN:-}" "$(command -v daytona 2>/dev/null)" "/usr/local/bin/daytona" "/home/linuxbrew/.linuxbrew/bin/daytona" "$HOME/.linuxbrew/bin/daytona" "$HOME/.daytona/bin/daytona" "$HOME/bin/daytona"; do
+        [ -n "$candidate" ] || continue
+        [ -x "$candidate" ] || continue
+        echo "$candidate"
+        return 0
+    done
+    return 1
+}
+
+ensure_daytona_symlink() {
+    local source_bin=$1
+    local target_bin="/usr/local/bin/daytona"
+    if [ "$source_bin" != "$target_bin" ]; then
+        sudo ln -sf "$source_bin" "$target_bin"
+    fi
+    echo "$target_bin"
+}
 
 echo "🚀 开始在 CentOS 上安装 OpenCode 环境..."
 
@@ -49,11 +70,24 @@ else
 fi
 
 # 5. 检查并安装 Daytona
-if command -v daytona &> /dev/null; then
-    echo "✅ Daytona 已安装: $(daytona --version)"
+if DAYTONA_BIN="$(resolve_daytona_bin)"; then
+    DAYTONA_BIN="$(ensure_daytona_symlink "$DAYTONA_BIN")"
+    echo "✅ Daytona 已安装: $("$DAYTONA_BIN" --version)"
 else
     echo "📦 安装 Daytona..."
-    curl -sfL https://download.daytona.io/daytona/install.sh | sudo bash
+    if command -v brew &> /dev/null; then
+        brew install daytonaio/cli/daytona
+    else
+        curl -sfL https://download.daytona.io/daytona/install.sh | sudo bash
+    fi
+    if DAYTONA_BIN="$(resolve_daytona_bin)"; then
+        DAYTONA_BIN="$(ensure_daytona_symlink "$DAYTONA_BIN")"
+        echo "✅ Daytona 已安装: $("$DAYTONA_BIN" --version)"
+    else
+        echo "❌ Daytona 安装已执行，但当前 shell 仍未发现可执行文件。"
+        echo "   请确认安装结果，或手动设置 DAYTONA_BIN 后重试。"
+        exit 1
+    fi
 fi
 
 # 6. 创建系统目录结构
@@ -106,15 +140,26 @@ echo "🚚 部署插件和配置文件..."
 deploy_file() {
     local src=$1
     local dest=$2
-...
+    if [ ! -f "$src" ]; then
+        echo "🗑️  源文件不存在，跳过部署: $src"
+        return 0
+    fi
+    if [ -f "$dest" ]; then
+        if cmp -s "$src" "$dest"; then
+            echo "ℹ️  文件一致，无需部署: $dest"
+            return 0
+        else
+            echo "💾 文件有差异，备份旧文件: $dest -> $dest.$DATE_SUFFIX"
+            mv "$dest" "$dest.$DATE_SUFFIX"
+        fi
     fi
     cp "$src" "$dest"
     echo "✅ 已更新: $dest"
 }
 
-if grep -q "PLUGIN_PATH_PLACEHOLDER" "$PROJECT_ROOT/opencode.json"; then
-    deploy_file "$PROJECT_ROOT/plugin/index.js" "$PLUGIN_DIR/index.js"
-    deploy_file "$PROJECT_ROOT/plugin/package.json" "$PLUGIN_DIR/package.json"
+if grep -q "PLUGIN_PATH_PLACEHOLDER" "$OPENCODE_TEMPLATE"; then
+    deploy_file "$PROJECT_ROOT/plugin/duckdb-model-router/index.js" "$PLUGIN_DIR/index.js"
+    deploy_file "$PROJECT_ROOT/plugin/duckdb-model-router/package.json" "$PLUGIN_DIR/package.json"
 fi
 
 deploy_file "$PROJECT_ROOT/plugin/daytona-sandbox/index.js" "$DAYTONA_PLUGIN_DIR/index.js"
@@ -122,7 +167,7 @@ deploy_file "$PROJECT_ROOT/plugin/daytona-sandbox/package.json" "$DAYTONA_PLUGIN
 deploy_file "$PROJECT_ROOT/opencode-mem.jsonc" "$CONFIG_DIR/opencode-mem.jsonc"
 
 echo "🚚 部署并配置 opencode.json..."
-sed "s|PLUGIN_PATH_PLACEHOLDER|$PLUGIN_DIR|g; s|DAYTONA_PLUGIN_PATH_PLACEHOLDER|$DAYTONA_PLUGIN_DIR|g" "$PROJECT_ROOT/opencode.json" > "$PROJECT_ROOT/opencode.json.tmp"
+sed "s|PLUGIN_PATH_PLACEHOLDER|$PLUGIN_DIR|g; s|DAYTONA_PLUGIN_PATH_PLACEHOLDER|$DAYTONA_PLUGIN_DIR|g" "$OPENCODE_TEMPLATE" > "$PROJECT_ROOT/opencode.json.tmp"
 
 if [ -f "$CONFIG_DIR/opencode.json" ]; then
     if cmp -s "$PROJECT_ROOT/opencode.json.tmp" "$CONFIG_DIR/opencode.json"; then

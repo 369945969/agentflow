@@ -99,6 +99,13 @@ const handleMessageListScroll = () => {
 
 const isThinkingExpanded = (streamKey: string) => Boolean(thinkingExpanded.value[streamKey])
 
+const hasMeaningfulThinking = (message: any) => {
+  if (!message) return false
+  const content = typeof message.content === 'string' ? message.content.trim() : ''
+  if (!content) return false
+  return !/^(\.{3}|…+)$/.test(content)
+}
+
 const toggleThinkingExpanded = (streamKey: string) => {
   thinkingExpanded.value = {
     ...thinkingExpanded.value,
@@ -596,7 +603,7 @@ onBeforeUnmount(() => {
               :class="group.kind === 'single' && group.message.type === 'user' ? 'justify-end' : 'justify-start'"
             >
               <div v-if="group.kind === 'assistant'" class="w-full max-w-[760px] space-y-3">
-                <div v-if="group.thinking" class="w-full text-amber-50">
+                <div v-if="group.thinking && hasMeaningfulThinking(group.thinking)" class="w-full text-amber-50">
                   <div class="rounded-2xl border border-amber-200/12 bg-amber-500/10 shadow-[0_12px_32px_rgba(251,191,36,0.08)]">
                     <button
                       type="button"

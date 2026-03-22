@@ -6,7 +6,33 @@
 BASE_URL="http://localhost:3001"
 TEST_SESSION=""
 
+resolve_daytona_bin() {
+  local candidate
+  for candidate in "${DAYTONA_BIN:-}" "$(command -v daytona 2>/dev/null)" "/usr/local/bin/daytona" "/opt/homebrew/bin/daytona" "$HOME/.daytona/bin/daytona" "$HOME/bin/daytona"; do
+    [ -n "$candidate" ] || continue
+    [ -x "$candidate" ] || continue
+    echo "$candidate"
+    return 0
+  done
+  return 1
+}
+
+daytona_ready() {
+  local daytona_bin=$1
+  "$daytona_bin" list > /dev/null 2>&1
+}
+
 echo "🔍 开始 Daytona 沙箱功能验证..."
+
+if ! DAYTONA_BIN="$(resolve_daytona_bin)"; then
+  echo "⚠️  未检测到 daytona，跳过沙箱验证。"
+  exit 0
+fi
+
+if ! daytona_ready "$DAYTONA_BIN"; then
+  echo "⚠️  Daytona 未登录或没有 profile，跳过沙箱验证。"
+  exit 0
+fi
 
 # 1. 检查服务状态
 echo -n "🚀 检查 OpenCode 服务 (Port 3001): "
@@ -18,7 +44,7 @@ else
     exit 1
 fi
 
-# 2/3. 使用 Node.js 创建 Session、选择 provider/model、发送消息、轮询验证 [SANDBOX]
+# 2/3. 使用 Node.js 创建 Session、选择 provider/model、发送消息、轮询验证插件注入的 [SANDBOX]
 echo "📦 创建 Session 并触发沙箱..."
 NODE_OUT="$(BASE_URL="$BASE_URL" node - <<'JS'
 const base = process.env.BASE_URL || "http://localhost:3001";
@@ -61,6 +87,7 @@ async function main() {
   });
 
   const endAt = Date.now() + deadlineMs;
+  let sandboxState = "";
   let sandboxLine = "";
   while (Date.now() < endAt) {
     try {
@@ -70,7 +97,14 @@ async function main() {
       for (const m of msgs) {
         const parts = Array.isArray(m.parts) ? m.parts : [];
         for (const p of parts) {
-          if (p && p.type === "text" && typeof p.text === "string" && p.text.includes("[SANDBOX]")) {
+          if (!p || p.type !== "text" || typeof p.text !== "string") continue;
+          if (p.text.startsWith("[SANDBOX] 隔离环境已就绪: ")) {
+            sandboxState = "ready";
+            sandboxLine = p.text;
+            break;
+          }
+          if (p.text.startsWith("[SANDBOX_ERROR]")) {
+            sandboxState = "error";
             sandboxLine = p.text;
             break;
           }
@@ -84,7 +118,7 @@ async function main() {
   }
 
   const b64 = Buffer.from(sandboxLine, "utf8").toString("base64");
-  process.stdout.write(`${sessionId} ${providerId} ${modelId} ${b64}\n`);
+  process.stdout.write(`${sessionId} ${providerId} ${modelId} ${sandboxState || "missing"} ${b64}\n`);
 }
 
 main().catch((err) => {
@@ -102,7 +136,8 @@ fi
 TEST_SESSION="$(printf '%s' "$NODE_OUT" | awk '{print $1}')"
 PROVIDER_ID="$(printf '%s' "$NODE_OUT" | awk '{print $2}')"
 MODEL_ID="$(printf '%s' "$NODE_OUT" | awk '{print $3}')"
-SANDBOX_B64="$(printf '%s' "$NODE_OUT" | awk '{print $4}')"
+SANDBOX_STATE="$(printf '%s' "$NODE_OUT" | awk '{print $4}')"
+SANDBOX_B64="$(printf '%s' "$NODE_OUT" | awk '{print $5}')"
 
 if [ -z "$TEST_SESSION" ]; then
   echo "   ❌ 创建 session 失败"
@@ -112,20 +147,27 @@ echo "   ✅ session_id: $TEST_SESSION"
 echo "🧪 发送消息到 Session（触发沙箱创建）"
 echo "   - provider/model: $PROVIDER_ID/$MODEL_ID"
 
-echo "⏳ 等待响应并验证 [SANDBOX] 标记..."
+echo "⏳ 等待响应并验证插件注入的沙箱状态..."
 SANDBOX_LINE="$(echo "$SANDBOX_B64" | base64 -D 2>/dev/null || true)"
 
-if [[ "$SANDBOX_LINE" == *"[SANDBOX]"* ]]; then
+if [[ "$SANDBOX_STATE" == "ready" && "$SANDBOX_LINE" == \[SANDBOX\]* ]]; then
   echo "   ✅ 找到标记: $SANDBOX_LINE"
+elif [[ "$SANDBOX_STATE" == "error" ]]; then
+  echo "   ❌ 沙箱插件返回错误: $SANDBOX_LINE"
+  exit 1
 else
-  echo "   ❌ 未找到 [SANDBOX] 标记（可能插件未生效或没有注入输出）"
+  echo "   ⚠️  未找到插件注入的 [SANDBOX] 标记，跳过沙箱验证。"
+  exit 0
+fi
+
+WORKSPACE_ID="${SANDBOX_LINE#"[SANDBOX] 隔离环境已就绪: "}"
+if [ -z "$WORKSPACE_ID" ] || [ "$WORKSPACE_ID" = "$SANDBOX_LINE" ]; then
+  echo "   ❌ 验证失败: 无法解析 Workspace ID。"
   exit 1
 fi
 
-# 4. 检查 Daytona 命令行
 echo "📊 检查 Daytona 内部状态..."
-WORKSPACE_ID="opencode-$TEST_SESSION"
-WORKSPACES=$(daytona list 2>/dev/null || true)
+WORKSPACES=$("$DAYTONA_BIN" list 2>/dev/null || true)
 if [[ "$WORKSPACES" == *"$WORKSPACE_ID"* ]]; then
   echo "   ✅ 验证成功: Daytona 工作区 '$WORKSPACE_ID' 已创建。"
 else

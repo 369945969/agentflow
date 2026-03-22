@@ -4,11 +4,41 @@
 # 逻辑：程序检测安装，内容有差异才备份并替换
 set -e
 
-PROJECT_ROOT=$(pwd)
+PROJECT_ROOT="$(cd "$(dirname "$0")" && pwd)"
+OPENCODE_TEMPLATE="$PROJECT_ROOT/opencode.template.json"
 PLUGIN_DIR="$HOME/.config/opencode/plugins/duckdb-model-router"
 DAYTONA_PLUGIN_DIR="$HOME/.config/opencode/plugins/daytona-sandbox"
 CONFIG_DIR="$HOME/.config/opencode"
 DATE_SUFFIX=$(date +%Y%m%d_%H%M%S)
+
+resolve_daytona_bin() {
+    local candidate
+    for candidate in "${DAYTONA_BIN:-}" "$(command -v daytona 2>/dev/null)" "/usr/local/bin/daytona" "/opt/homebrew/bin/daytona" "$HOME/.daytona/bin/daytona" "$HOME/bin/daytona"; do
+        [ -n "$candidate" ] || continue
+        [ -x "$candidate" ] || continue
+        echo "$candidate"
+        return 0
+    done
+    return 1
+}
+
+ensure_daytona_symlink() {
+    local source_bin=$1
+    local target_bin
+    for target_bin in "/usr/local/bin/daytona" "/opt/homebrew/bin/daytona"; do
+        local target_dir
+        target_dir="$(dirname "$target_bin")"
+        if [ -d "$target_dir" ]; then
+            if [ "$source_bin" != "$target_bin" ]; then
+                sudo ln -sf "$source_bin" "$target_bin"
+            fi
+            echo "$target_bin"
+            return 0
+        fi
+    done
+    echo "$source_bin"
+    return 0
+}
 
 echo "🚀 开始在 macOS 上安装 OpenCode 环境..."
 
@@ -51,17 +81,42 @@ else
 fi
 
 # 6. 检查并安装 Daytona
-if command -v daytona &> /dev/null; then
-    echo "✅ Daytona 已安装: $(daytona --version)"
+if DAYTONA_BIN="$(resolve_daytona_bin)"; then
+    DAYTONA_BIN="$(ensure_daytona_symlink "$DAYTONA_BIN")"
+    echo "✅ Daytona 已安装: $("$DAYTONA_BIN" --version)"
 else
     echo "📦 安装 Daytona..."
-    curl -sfL https://download.daytona.io/daytona/install.sh | sudo bash
+    brew install daytonaio/cli/daytona
+    hash -r 2>/dev/null || true
+    if DAYTONA_BIN="$(resolve_daytona_bin)"; then
+        DAYTONA_BIN="$(ensure_daytona_symlink "$DAYTONA_BIN")"
+        echo "✅ Daytona 已安装: $("$DAYTONA_BIN" --version)"
+    else
+        echo "❌ Daytona 安装已执行，但当前 shell 仍未发现可执行文件。"
+        echo "   请检查 Homebrew 是否成功安装了 daytonaio/cli/daytona。"
+        exit 1
+    fi
 fi
 
 # 7. 创建系统目录结构
 echo "📂 检查目录结构..."
-sudo mkdir -p /opt/duckdb
-sudo chmod 777 /opt/duckdb
+if [ -d /opt/duckdb ]; then
+    :
+elif [ -t 0 ]; then
+    sudo mkdir -p /opt/duckdb
+else
+    echo "⚠️  未检测到交互终端，且 /opt/duckdb 不存在，跳过创建。"
+fi
+
+if [ -d /opt/duckdb ]; then
+    if [ -w /opt/duckdb ]; then
+        chmod 777 /opt/duckdb 2>/dev/null || true
+    elif [ -t 0 ]; then
+        sudo chmod 777 /opt/duckdb
+    else
+        echo "⚠️  未检测到交互终端，无法调整 /opt/duckdb 权限。"
+    fi
+fi
 mkdir -p "$PLUGIN_DIR"
 mkdir -p "$DAYTONA_PLUGIN_DIR"
 mkdir -p "$CONFIG_DIR"
@@ -127,7 +182,7 @@ deploy_file() {
 
 # 部署路由插件 (如果被使用)
 # 检查 opencode.json 模板是否包含该插件
-if grep -q "PLUGIN_PATH_PLACEHOLDER" "$PROJECT_ROOT/opencode.json"; then
+if grep -q "PLUGIN_PATH_PLACEHOLDER" "$OPENCODE_TEMPLATE"; then
     if [ -f "$PROJECT_ROOT/plugin/duckdb-model-router/index.js" ] && [ -f "$PROJECT_ROOT/plugin/duckdb-model-router/package.json" ]; then
         deploy_file "$PROJECT_ROOT/plugin/duckdb-model-router/index.js" "$PLUGIN_DIR/index.js"
         deploy_file "$PROJECT_ROOT/plugin/duckdb-model-router/package.json" "$PLUGIN_DIR/package.json"
@@ -151,7 +206,12 @@ deploy_file "$PROJECT_ROOT/opencode-mem.jsonc" "$CONFIG_DIR/opencode-mem.jsonc"
 echo "🚚 部署并配置 opencode.json..."
 PLUGIN_URI="file://$PLUGIN_DIR"
 DAYTONA_PLUGIN_URI="file://$DAYTONA_PLUGIN_DIR"
-sed "s|PLUGIN_PATH_PLACEHOLDER|$PLUGIN_URI|g; s|DAYTONA_PLUGIN_PATH_PLACEHOLDER|$DAYTONA_PLUGIN_URI|g" "$PROJECT_ROOT/opencode.json" > "$PROJECT_ROOT/opencode.json.tmp"
+sed "s|DAYTONA_PLUGIN_PATH_PLACEHOLDER|$DAYTONA_PLUGIN_URI|g; s|PLUGIN_PATH_PLACEHOLDER|$PLUGIN_URI|g" "$OPENCODE_TEMPLATE" > "$PROJECT_ROOT/opencode.json.tmp"
+
+if grep -q "PLUGIN_PATH_PLACEHOLDER\|DAYTONA_PLUGIN_PATH_PLACEHOLDER" "$PROJECT_ROOT/opencode.json.tmp"; then
+    echo "❌ opencode.json 占位符替换失败，请检查路径与模板文件: $OPENCODE_TEMPLATE"
+    exit 1
+fi
 
 if [ -f "$CONFIG_DIR/opencode.json" ]; then
     if cmp -s "$PROJECT_ROOT/opencode.json.tmp" "$CONFIG_DIR/opencode.json"; then

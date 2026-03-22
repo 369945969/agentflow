@@ -39,7 +39,10 @@ const fetchAgents = async () => {
   try {
     const response = await fetch(`${API_BASE_URL}/api/agents/`)
     const data = await response.json()
-    agents.value = data || []
+    agents.value = (data || []).map((agent: any) => ({
+      ...agent,
+      skills: normalizeSkills(agent.skills)
+    }))
   } catch (error) {
     console.error('Failed to fetch digital employees:', error)
     agents.value = []
@@ -73,6 +76,21 @@ const currentEmployee = ref<any>({
   skills: []
 })
 
+const normalizeSkills = (skills: unknown): string[] => {
+  if (Array.isArray(skills)) {
+    return [...new Set(skills.filter((skill): skill is string => typeof skill === 'string' && skill.trim().length > 0))]
+  }
+  if (typeof skills === 'string' && skills.trim().length > 0) {
+    return [skills]
+  }
+  return []
+}
+
+const selectedSkills = computed(() => {
+  const selected = new Set(normalizeSkills(currentEmployee.value.skills))
+  return allSkills.value.filter(skill => selected.has(skill.id))
+})
+
 const toggleLayout = (type: 'grid' | 'list') => {
   viewLayout.value = type
 }
@@ -100,9 +118,9 @@ const openCreateModal = () => {
 
 const openEditModal = (agent: any) => {
   isEditing.value = true
-  currentEmployee.value = { ...agent }
-  if (!currentEmployee.value.skills) {
-    currentEmployee.value.skills = []
+  currentEmployee.value = {
+    ...agent,
+    skills: normalizeSkills(agent.skills)
   }
   isCreateModalOpen.value = true
 }
@@ -124,7 +142,10 @@ const handleCreate = async () => {
     const response = await fetch(`${API_BASE_URL}/api/agents/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(currentEmployee.value)
+      body: JSON.stringify({
+        ...currentEmployee.value,
+        skills: normalizeSkills(currentEmployee.value.skills)
+      })
     })
     if (response.ok) {
       await fetchAgents()
@@ -140,7 +161,10 @@ const handleUpdate = async () => {
     const response = await fetch(`${API_BASE_URL}/api/agents/${currentEmployee.value.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(currentEmployee.value)
+      body: JSON.stringify({
+        ...currentEmployee.value,
+        skills: normalizeSkills(currentEmployee.value.skills)
+      })
     })
     if (response.ok) {
       await fetchAgents()
@@ -176,6 +200,7 @@ const getSkillName = (skillId: string) => {
 }
 
 const toggleSkill = (skillId: string) => {
+  currentEmployee.value.skills = normalizeSkills(currentEmployee.value.skills)
   const index = currentEmployee.value.skills.indexOf(skillId)
   if (index === -1) {
     currentEmployee.value.skills.push(skillId)
@@ -242,7 +267,7 @@ const toggleSkill = (skillId: string) => {
             <div class="flex-1 min-w-0">
               <p class="text-sm text-white/50 mb-4" :class="viewLayout === 'grid' ? 'line-clamp-2 h-10' : ''">{{ agent.description || '暂无职责描述' }}</p>
               <!-- Display Skills -->
-              <div v-if="agent.skills && agent.skills.length > 0" class="flex flex-wrap gap-2 mb-4 h-6 overflow-hidden">
+              <div v-if="agent.skills && agent.skills.length > 0" class="flex flex-wrap gap-2 mb-4">
                 <span v-for="skillId in agent.skills" :key="skillId" class="px-2 py-0.5 bg-[#3B9BFF]/10 text-[#3B9BFF] text-[10px] rounded-md border border-[#3B9BFF]/20 whitespace-nowrap">
                   {{ getSkillName(skillId) }}
                 </span>
@@ -322,13 +347,25 @@ const toggleSkill = (skillId: string) => {
 
                 <!-- Right: Skills -->
                 <div class="space-y-6">
-                  <label class="text-xs text-white/40 block font-bold uppercase tracking-widest">绑定专业技能</label>
+                  <div class="flex items-center justify-between gap-4">
+                    <label class="text-xs text-white/40 block font-bold uppercase tracking-widest">绑定专业技能（可多选）</label>
+                    <span class="text-xs text-[#3B9BFF]">{{ selectedSkills.length }} 项已选择</span>
+                  </div>
+                  <div v-if="selectedSkills.length > 0" class="flex flex-wrap gap-2">
+                    <span v-for="skill in selectedSkills" :key="skill.id" class="px-3 py-1 rounded-full bg-[#3B9BFF]/10 text-[#3B9BFF] text-xs border border-[#3B9BFF]/20">
+                      {{ skill.name }}
+                    </span>
+                  </div>
                   <div class="grid grid-cols-1 gap-2 max-h-[450px] overflow-y-auto custom-scrollbar pr-2">
                     <div v-for="skill in allSkills" :key="skill.id" 
                       @click="toggleSkill(skill.id)"
                       class="p-3 border rounded-xl cursor-pointer transition-all flex items-center gap-3"
-                      :class="currentEmployee.skills.includes(skill.id) ? 'border-[#3B9BFF] bg-[#3B9BFF]/10' : 'border-white/5 bg-white/5 hover:border-white/10'"
+                      :class="normalizeSkills(currentEmployee.skills).includes(skill.id) ? 'border-[#3B9BFF] bg-[#3B9BFF]/10' : 'border-white/5 bg-white/5 hover:border-white/10'"
                     >
+                      <div class="w-5 h-5 rounded border flex items-center justify-center shrink-0"
+                        :class="normalizeSkills(currentEmployee.skills).includes(skill.id) ? 'border-[#3B9BFF] bg-[#3B9BFF] text-white' : 'border-white/15 bg-black/20 text-transparent'">
+                        <iconify-icon icon="lucide:check" class="text-xs"></iconify-icon>
+                      </div>
                       <div class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" :style="{ backgroundColor: skill.color + '20', color: skill.color }">
                         <iconify-icon :icon="skill.icon || 'lucide:zap'"></iconify-icon>
                       </div>
@@ -336,7 +373,6 @@ const toggleSkill = (skillId: string) => {
                         <div class="text-sm font-medium text-white/90 truncate">{{ skill.name }}</div>
                         <div class="text-[10px] text-white/30 truncate uppercase">{{ skill.type }}</div>
                       </div>
-                      <iconify-icon v-if="currentEmployee.skills.includes(skill.id)" icon="lucide:check" class="text-[#3B9BFF]"></iconify-icon>
                     </div>
                     <div v-if="allSkills.length === 0" class="text-center py-12 bg-white/5 rounded-2xl border border-white/5 border-dashed">
                       <p class="text-xs text-white/20">暂无可用技能</p>

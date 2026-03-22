@@ -3,7 +3,7 @@ package db
 import (
 	"apiServer/config"
 	"bufio"
-	"fmt"
+	"database/sql"
 	"log"
 	"os"
 	"path/filepath"
@@ -18,6 +18,7 @@ type SkillInfo struct {
 	Name        string
 	Description string
 	DirName     string
+	AbsPath     string
 }
 
 type SkillFrontmatter struct {
@@ -32,14 +33,7 @@ func SyncSkills() {
 		return
 	}
 
-	// 1. Clear skills table
-	_, err := DB.Exec("DELETE FROM skills")
-	if err != nil {
-		log.Fatalf("Failed to clear skills table: %v", err)
-	}
-	log.Println("🧹 Cleared skills table")
-
-	// 2. Scan skills directory
+	// 1. Scan skills directory
 	entries, err := os.ReadDir(skillsPath)
 	if err != nil {
 		log.Fatalf("Failed to read skills directory: %v", err)
@@ -59,38 +53,108 @@ func SyncSkills() {
 			continue
 		}
 
-		// 3. Parse SKILL.md for name and description
+		// 2. Parse SKILL.md for name and description
 		name, description := parseSkillMd(skillMdPath)
 		if name == "" {
 			name = entry.Name() // Fallback to directory name
+		}
+		absPath, err := filepath.Abs(skillDir)
+		if err != nil {
+			log.Printf("Failed to resolve absolute path for skill %s: %v", entry.Name(), err)
+			continue
 		}
 
 		skillList = append(skillList, SkillInfo{
 			Name:        name,
 			Description: description,
 			DirName:     entry.Name(),
+			AbsPath:     absPath,
 		})
 	}
 
-	// 4. Sort skills by Name alphabetically
+	// 3. Sort skills by Name alphabetically
 	sort.Slice(skillList, func(i, j int) bool {
 		return strings.ToLower(skillList[i].Name) < strings.ToLower(skillList[j].Name)
 	})
 
-	// 5. Insert into database in sorted order
+	tx, err := DB.Begin()
+	if err != nil {
+		log.Fatalf("Failed to start skill sync transaction: %v", err)
+	}
+	defer tx.Rollback()
+
+	// 4. Upsert into database in sorted order using path + name as the identity.
 	for _, s := range skillList {
-		id := uuid.New().String()
-		absPath, _ := filepath.Abs(filepath.Join(skillsPath, s.DirName))
-		_, err = DB.Exec("INSERT INTO skills (id, name, description, type, version, icon) VALUES (?, ?, ?, ?, ?, ?)",
-			id, s.Name, s.Description, "Local", absPath, "lucide:terminal")
-		if err != nil {
-			log.Printf("Failed to insert skill %s: %v", s.Name, err)
+		if err := upsertLocalSkill(tx, s); err != nil {
+			log.Printf("Failed to sync skill %s (%s): %v", s.Name, s.AbsPath, err)
 			continue
 		}
 		log.Printf("✅ Synced skill: %s", s.Name)
 	}
 
-	fmt.Println("🚀 Skills sync completed")
+	if err := tx.Commit(); err != nil {
+		log.Fatalf("Failed to commit skill sync transaction: %v", err)
+	}
+
+	log.Println("🚀 Skills sync completed")
+}
+
+func upsertLocalSkill(tx *sql.Tx, skill SkillInfo) error {
+	rows, err := tx.Query(
+		"SELECT id FROM skills WHERE name = ? AND version = ? ORDER BY created_at ASC, id ASC",
+		skill.Name, skill.AbsPath,
+	)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	var existingIDs []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return err
+		}
+		existingIDs = append(existingIDs, id)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	if len(existingIDs) == 0 {
+		_, err = tx.Exec(
+			"INSERT INTO skills (id, name, description, type, version, icon) VALUES (?, ?, ?, ?, ?, ?)",
+			uuid.New().String(), skill.Name, skill.Description, "Local", skill.AbsPath, "lucide:terminal",
+		)
+		return err
+	}
+
+	canonicalID := existingIDs[0]
+	_, err = tx.Exec(
+		"UPDATE skills SET description = ?, type = ?, version = ?, icon = ? WHERE id = ?",
+		skill.Description, "Local", skill.AbsPath, "lucide:terminal", canonicalID,
+	)
+	if err != nil {
+		return err
+	}
+
+	for _, duplicateID := range existingIDs[1:] {
+		if _, err := tx.Exec(
+			"INSERT OR IGNORE INTO agent_skills (agent_id, skill_id) SELECT agent_id, ? FROM agent_skills WHERE skill_id = ?",
+			canonicalID, duplicateID,
+		); err != nil {
+			return err
+		}
+		if _, err := tx.Exec("DELETE FROM agent_skills WHERE skill_id = ?", duplicateID); err != nil {
+			return err
+		}
+		if _, err := tx.Exec("DELETE FROM skills WHERE id = ?", duplicateID); err != nil {
+			return err
+		}
+		log.Printf("🧹 Merged duplicate skill %s (%s) into %s", skill.Name, skill.AbsPath, canonicalID)
+	}
+
+	return nil
 }
 
 func parseSkillMd(path string) (string, string) {
@@ -103,7 +167,7 @@ func parseSkillMd(path string) (string, string) {
 	var frontmatterRaw strings.Builder
 	scanner := bufio.NewScanner(file)
 	inFrontmatter := false
-	
+
 	for scanner.Scan() {
 		line := scanner.Text()
 		if line == "---" {
