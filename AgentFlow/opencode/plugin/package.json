@@ -1,0 +1,7 @@
+{
+  "name": "duckdb-model-router",
+  "version": "1.0.0",
+  "main": "index.js",
+  "type": "module",
+  "description": "DuckDB model router plugin placeholder"
+}

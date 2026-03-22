@@ -1,52 +1,61 @@
-INFO  2026-03-22T03:51:52 +270ms service=default version=1.2.10 args=["serve","--port","3001","--log-level","INFO","--print-logs"] opencode
+INFO  2026-03-22T04:08:49 +393ms service=default version=1.2.10 args=["serve","--port","3001","--log-level","INFO","--print-logs"] opencode
 Warning: OPENCODE_SERVER_PASSWORD is not set; server is unsecured.
-INFO  2026-03-22T03:51:52 +0ms service=config path=/Users/jack/.config/opencode/config.json loading
-INFO  2026-03-22T03:51:52 +1ms service=config path=/Users/jack/.config/opencode/opencode.json loading
-INFO  2026-03-22T03:51:52 +7ms service=config path=/Users/jack/.config/opencode/opencode.jsonc loading
+INFO  2026-03-22T04:08:49 +0ms service=config path=/Users/jack/.config/opencode/config.json loading
+INFO  2026-03-22T04:08:49 +1ms service=config path=/Users/jack/.config/opencode/opencode.json loading
+INFO  2026-03-22T04:08:49 +8ms service=config path=/Users/jack/.config/opencode/opencode.jsonc loading
 opencode server listening on http://127.0.0.1:3001
-INFO  2026-03-22T03:51:56 +3955ms service=server method=GET path=/global/health request
-INFO  2026-03-22T03:51:56 +0ms service=server status=started method=GET path=/global/health request
-INFO  2026-03-22T03:51:56 +0ms service=server status=completed duration=0 method=GET path=/global/health request
-INFO  2026-03-22T03:51:56 +11ms service=server method=POST path=/session request
-INFO  2026-03-22T03:51:56 +0ms service=server status=started method=POST path=/session request
-INFO  2026-03-22T03:51:56 +0ms service=default directory=/Users/jack/Desktop/agent/AgentFlow/opencode creating instance
-INFO  2026-03-22T03:51:56 +0ms service=project directory=/Users/jack/Desktop/agent/AgentFlow/opencode fromDirectory
-INFO  2026-03-22T03:51:56 +28ms service=db path=/Users/jack/.local/share/opencode/opencode.db opening database
-INFO  2026-03-22T03:51:56 +2ms service=db count=3 mode=bundled applying migrations
-INFO  2026-03-22T03:51:56 +5ms service=default directory=/Users/jack/Desktop/agent/AgentFlow/opencode bootstrapping
-INFO  2026-03-22T03:51:56 +2ms service=config path=/Users/jack/Desktop/agent/AgentFlow/opencode/opencode.json loading
-INFO  2026-03-22T03:51:56 +4ms service=config path=/Users/jack/.opencode/opencode.jsonc loading
-INFO  2026-03-22T03:51:56 +0ms service=config path=/Users/jack/.opencode/opencode.json loading
-INFO  2026-03-22T03:51:56 +3ms service=plugin name=CodexAuthPlugin loading internal plugin
-INFO  2026-03-22T03:51:56 +1ms service=plugin name=CopilotAuthPlugin loading internal plugin
-INFO  2026-03-22T03:51:56 +0ms service=plugin name=gitlabAuthPlugin loading internal plugin
-INFO  2026-03-22T03:51:56 +0ms service=plugin path=opencode-anthropic-auth@0.0.13 loading plugin
-INFO  2026-03-22T03:51:56 +23ms service=plugin path=opencode-mem loading plugin
-INFO  2026-03-22T03:51:57 +1240ms service=server method=GET path=/path request
-INFO  2026-03-22T03:51:57 +0ms service=server status=started method=GET path=/path request
-INFO  2026-03-22T03:51:57 +0ms service=plugin path=plugins/daytona-sandbox loading plugin
-INFO  2026-03-22T03:51:57 +0ms service=server method=POST path=/tui/show-toast request
-INFO  2026-03-22T03:51:57 +0ms service=server status=started method=POST path=/tui/show-toast request
-INFO  2026-03-22T03:51:57 +1ms service=bun pkg=plugins/daytona-sandbox version=latest installing package using Bun's default registry resolution
-INFO  2026-03-22T03:51:57 +0ms service=bun cmd=["/opt/homebrew/Cellar/opencode/1.2.10/libexec/lib/node_modules/opencode-ai/node_modules/opencode-darwin-arm64/bin/opencode","add","--force","--exact","--cwd","/Users/jack/.cache/opencode","plugins/daytona-sandbox@latest"] cwd=/Users/jack/.cache/opencode running
-INFO  2026-03-22T03:51:57 +5ms service=bun code=1 stdout=bun add v1.3.9 (cf6cdbbb)
- stderr=error: unrecognised dependency format: plugins/daytona-sandbox@latest
+INFO  2026-03-22T04:08:51 +2433ms service=server method=GET path=/global/health request
+INFO  2026-03-22T04:08:51 +0ms service=server status=started method=GET path=/global/health request
+INFO  2026-03-22T04:08:51 +1ms service=server status=completed duration=1 method=GET path=/global/health request
+INFO  2026-03-22T04:08:51 +94ms service=server method=POST path=/session request
+INFO  2026-03-22T04:08:51 +0ms service=server status=started method=POST path=/session request
+INFO  2026-03-22T04:08:51 +1ms service=default directory=/Users/jack/Desktop/agent/AgentFlow/opencode creating instance
+INFO  2026-03-22T04:08:51 +0ms service=project directory=/Users/jack/Desktop/agent/AgentFlow/opencode fromDirectory
+INFO  2026-03-22T04:08:51 +21ms service=db path=/Users/jack/.local/share/opencode/opencode.db opening database
+INFO  2026-03-22T04:08:51 +3ms service=db count=3 mode=bundled applying migrations
+INFO  2026-03-22T04:08:51 +6ms service=default directory=/Users/jack/Desktop/agent/AgentFlow/opencode bootstrapping
+INFO  2026-03-22T04:08:51 +2ms service=config path=/Users/jack/Desktop/agent/AgentFlow/opencode/opencode.json loading
+INFO  2026-03-22T04:08:51 +3ms service=config path=/Users/jack/.opencode/opencode.jsonc loading
+INFO  2026-03-22T04:08:51 +0ms service=config path=/Users/jack/.opencode/opencode.json loading
+INFO  2026-03-22T04:08:51 +3ms service=plugin name=CodexAuthPlugin loading internal plugin
+INFO  2026-03-22T04:08:51 +0ms service=plugin name=CopilotAuthPlugin loading internal plugin
+INFO  2026-03-22T04:08:51 +0ms service=plugin name=gitlabAuthPlugin loading internal plugin
+INFO  2026-03-22T04:08:51 +0ms service=plugin path=opencode-anthropic-auth@0.0.13 loading plugin
+INFO  2026-03-22T04:08:51 +11ms service=plugin path=opencode-mem loading plugin
+ERROR 2026-03-22T04:08:58 +7025ms service=models.dev error=The operation timed out. Failed to fetch models.dev
+INFO  2026-03-22T04:09:07 +8802ms service=server method=GET path=/path request
+INFO  2026-03-22T04:09:07 +0ms service=server status=started method=GET path=/path request
+INFO  2026-03-22T04:09:07 +0ms service=plugin path=DAYTONA_PLUGIN_PATH_PLACEHOLDER loading plugin
+INFO  2026-03-22T04:09:07 +0ms service=server method=POST path=/tui/show-toast request
+INFO  2026-03-22T04:09:07 +0ms service=server status=started method=POST path=/tui/show-toast request
+INFO  2026-03-22T04:09:07 +0ms service=bun pkg=DAYTONA_PLUGIN_PATH_PLACEHOLDER version=latest installing package using Bun's default registry resolution
+INFO  2026-03-22T04:09:07 +1ms service=bun cmd=["/opt/homebrew/Cellar/opencode/1.2.10/libexec/lib/node_modules/opencode-ai/node_modules/opencode-darwin-arm64/bin/opencode","add","--force","--exact","--cwd","/Users/jack/.cache/opencode","DAYTONA_PLUGIN_PATH_PLACEHOLDER@latest"] cwd=/Users/jack/.cache/opencode running
+INFO  2026-03-22T04:09:08 +750ms service=server method=GET path=/global/health request
+INFO  2026-03-22T04:09:08 +0ms service=server status=started method=GET path=/global/health request
+INFO  2026-03-22T04:09:08 +0ms service=server status=completed duration=0 method=GET path=/global/health request
+INFO  2026-03-22T04:09:08 +94ms service=server method=POST path=/session request
+INFO  2026-03-22T04:09:08 +0ms service=server status=started method=POST path=/session request
+INFO  2026-03-22T04:09:11 +3088ms service=bun code=1 stdout=bun add v1.3.9 (cf6cdbbb)
+ stderr=Resolving dependencies
+Resolved, downloaded and extracted [1]
+error: GET https://registry.npmjs.org/DAYTONA_PLUGIN_PATH_PLACEHOLDER - 404
  done
-ERROR 2026-03-22T03:51:57 +0ms service=server error=BunInstallFailedError Caused by: Command failed with exit code 1 failed
-ERROR 2026-03-22T03:51:57 +0ms service=server error=BunInstallFailedError Caused by: Command failed with exit code 1 failed
-ERROR 2026-03-22T03:51:57 +0ms service=server error=BunInstallFailedError Caused by: Command failed with exit code 1 failed
-INFO  2026-03-22T03:51:57 +0ms service=server status=completed duration=1314 method=POST path=/session request
-INFO  2026-03-22T03:51:57 +0ms service=server status=completed duration=6 method=GET path=/path request
-INFO  2026-03-22T03:51:57 +0ms service=server status=completed duration=6 method=POST path=/tui/show-toast request
-INFO  2026-03-22T03:51:57 +1ms service=server method=GET path=/provider request
-INFO  2026-03-22T03:51:57 +0ms service=server status=started method=GET path=/provider request
-ERROR 2026-03-22T03:51:57 +0ms service=server error=BunInstallFailedError Caused by: Command failed with exit code 1 failed
-INFO  2026-03-22T03:51:57 +0ms service=server status=completed duration=0 method=GET path=/provider request
-INFO  2026-03-22T03:51:57 +14ms service=server method=GET path=/provider request
-INFO  2026-03-22T03:51:57 +0ms service=server status=started method=GET path=/provider request
-ERROR 2026-03-22T03:51:57 +0ms service=server error=BunInstallFailedError Caused by: Command failed with exit code 1 failed
-INFO  2026-03-22T03:51:57 +0ms service=server status=completed duration=0 method=GET path=/provider request
-INFO  2026-03-22T03:51:57 +41ms service=server method=POST path=/session//message request
-INFO  2026-03-22T03:51:57 +0ms service=server status=started method=POST path=/session//message request
-ERROR 2026-03-22T03:51:57 +0ms service=server error=BunInstallFailedError Caused by: Command failed with exit code 1 failed
-INFO  2026-03-22T03:51:57 +0ms service=server status=completed duration=0 method=POST path=/session//message request
+ERROR 2026-03-22T04:09:11 +1ms service=server error=BunInstallFailedError Caused by: Command failed with exit code 1 failed
+ERROR 2026-03-22T04:09:11 +0ms service=server error=BunInstallFailedError Caused by: Command failed with exit code 1 failed
+ERROR 2026-03-22T04:09:11 +0ms service=server error=BunInstallFailedError Caused by: Command failed with exit code 1 failed
+ERROR 2026-03-22T04:09:11 +0ms service=server error=BunInstallFailedError Caused by: Command failed with exit code 1 failed
+INFO  2026-03-22T04:09:11 +0ms service=server status=completed duration=19811 method=POST path=/session request
+INFO  2026-03-22T04:09:11 +0ms service=server status=completed duration=3934 method=GET path=/path request
+INFO  2026-03-22T04:09:11 +0ms service=server status=completed duration=3934 method=POST path=/tui/show-toast request
+INFO  2026-03-22T04:09:11 +0ms service=server status=completed duration=3089 method=POST path=/session request
+INFO  2026-03-22T04:09:11 +1ms service=server method=GET path=/provider request
+INFO  2026-03-22T04:09:11 +0ms service=server status=started method=GET path=/provider request
+ERROR 2026-03-22T04:09:11 +0ms service=server error=BunInstallFailedError Caused by: Command failed with exit code 1 failed
+INFO  2026-03-22T04:09:11 +0ms service=server status=completed duration=0 method=GET path=/provider request
+INFO  2026-03-22T04:09:15 +3512ms service=server method=GET path=/global/health request
+INFO  2026-03-22T04:09:15 +0ms service=server status=started method=GET path=/global/health request
+INFO  2026-03-22T04:09:15 +0ms service=server status=completed duration=0 method=GET path=/global/health request
+INFO  2026-03-22T04:09:15 +85ms service=server method=POST path=/session request
+INFO  2026-03-22T04:09:15 +1ms service=server status=started method=POST path=/session request
+ERROR 2026-03-22T04:09:15 +0ms service=server error=BunInstallFailedError Caused by: Command failed with exit code 1 failed
+INFO  2026-03-22T04:09:15 +0ms service=server status=completed duration=0 method=POST path=/session request

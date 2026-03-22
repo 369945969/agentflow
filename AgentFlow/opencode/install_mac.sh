@@ -108,6 +108,10 @@ echo "🚚 部署插件和配置文件..."
 deploy_file() {
     local src=$1
     local dest=$2
+    if [ ! -f "$src" ]; then
+        echo "🗑️  源文件不存在，跳过部署: $src"
+        return 0
+    fi
     if [ -f "$dest" ]; then
         if cmp -s "$src" "$dest"; then
             echo "ℹ️  文件一致，无需部署: $dest"
@@ -124,8 +128,12 @@ deploy_file() {
 # 部署路由插件 (如果被使用)
 # 检查 opencode.json 模板是否包含该插件
 if grep -q "PLUGIN_PATH_PLACEHOLDER" "$PROJECT_ROOT/opencode.json"; then
-    deploy_file "$PROJECT_ROOT/plugin/index.js" "$PLUGIN_DIR/index.js"
-    deploy_file "$PROJECT_ROOT/plugin/package.json" "$PLUGIN_DIR/package.json"
+    if [ -f "$PROJECT_ROOT/plugin/duckdb-model-router/index.js" ] && [ -f "$PROJECT_ROOT/plugin/duckdb-model-router/package.json" ]; then
+        deploy_file "$PROJECT_ROOT/plugin/duckdb-model-router/index.js" "$PLUGIN_DIR/index.js"
+        deploy_file "$PROJECT_ROOT/plugin/duckdb-model-router/package.json" "$PLUGIN_DIR/package.json"
+    else
+        echo "🗑️  duckdb-model-router 在配置中被引用，但项目中已删除源文件，跳过部署。"
+    fi
 else
     echo "🗑️  检测到 duckdb-model-router 未在配置中使用，跳过部署。"
     # 如果您想删除物理文件，可以解除下面注释
@@ -141,7 +149,9 @@ deploy_file "$PROJECT_ROOT/opencode-mem.jsonc" "$CONFIG_DIR/opencode-mem.jsonc"
 
 # 特殊处理 opencode.json 以替换绝对路径
 echo "🚚 部署并配置 opencode.json..."
-sed "s|PLUGIN_PATH_PLACEHOLDER|$PLUGIN_DIR|g; s|DAYTONA_PLUGIN_PATH_PLACEHOLDER|$DAYTONA_PLUGIN_DIR|g" "$PROJECT_ROOT/opencode.json" > "$PROJECT_ROOT/opencode.json.tmp"
+PLUGIN_URI="file://$PLUGIN_DIR"
+DAYTONA_PLUGIN_URI="file://$DAYTONA_PLUGIN_DIR"
+sed "s|PLUGIN_PATH_PLACEHOLDER|$PLUGIN_URI|g; s|DAYTONA_PLUGIN_PATH_PLACEHOLDER|$DAYTONA_PLUGIN_URI|g" "$PROJECT_ROOT/opencode.json" > "$PROJECT_ROOT/opencode.json.tmp"
 
 if [ -f "$CONFIG_DIR/opencode.json" ]; then
     if cmp -s "$PROJECT_ROOT/opencode.json.tmp" "$CONFIG_DIR/opencode.json"; then

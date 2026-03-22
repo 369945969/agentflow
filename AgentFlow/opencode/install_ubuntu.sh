@@ -109,6 +109,10 @@ echo "🚚 部署插件和配置文件..."
 deploy_file() {
     local src=$1
     local dest=$2
+    if [ ! -f "$src" ]; then
+        echo "🗑️  源文件不存在，跳过部署: $src"
+        return 0
+    fi
     if [ -f "$dest" ]; then
         if cmp -s "$src" "$dest"; then
             echo "ℹ️  文件一致，无需部署: $dest"
@@ -123,8 +127,8 @@ deploy_file() {
 }
 
 if grep -q "PLUGIN_PATH_PLACEHOLDER" "$PROJECT_ROOT/opencode.json"; then
-    deploy_file "$PROJECT_ROOT/plugin/index.js" "$PLUGIN_DIR/index.js"
-    deploy_file "$PROJECT_ROOT/plugin/package.json" "$PLUGIN_DIR/package.json"
+    deploy_file "$PROJECT_ROOT/plugin/duckdb-model-router/index.js" "$PLUGIN_DIR/index.js"
+    deploy_file "$PROJECT_ROOT/plugin/duckdb-model-router/package.json" "$PLUGIN_DIR/package.json"
 fi
 
 deploy_file "$PROJECT_ROOT/plugin/daytona-sandbox/index.js" "$DAYTONA_PLUGIN_DIR/index.js"
@@ -132,7 +136,9 @@ deploy_file "$PROJECT_ROOT/plugin/daytona-sandbox/package.json" "$DAYTONA_PLUGIN
 deploy_file "$PROJECT_ROOT/opencode-mem.jsonc" "$CONFIG_DIR/opencode-mem.jsonc"
 
 echo "🚚 部署并配置 opencode.json..."
-sed "s|PLUGIN_PATH_PLACEHOLDER|$PLUGIN_DIR|g; s|DAYTONA_PLUGIN_PATH_PLACEHOLDER|$DAYTONA_PLUGIN_DIR|g" "$PROJECT_ROOT/opencode.json" > "$PROJECT_ROOT/opencode.json.tmp"
+PLUGIN_URI="file://$PLUGIN_DIR"
+DAYTONA_PLUGIN_URI="file://$DAYTONA_PLUGIN_DIR"
+sed "s|PLUGIN_PATH_PLACEHOLDER|$PLUGIN_URI|g; s|DAYTONA_PLUGIN_PATH_PLACEHOLDER|$DAYTONA_PLUGIN_URI|g" "$PROJECT_ROOT/opencode.json" > "$PROJECT_ROOT/opencode.json.tmp"
 
 if [ -f "$CONFIG_DIR/opencode.json" ]; then
     if cmp -s "$PROJECT_ROOT/opencode.json.tmp" "$CONFIG_DIR/opencode.json"; then

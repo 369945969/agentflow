@@ -18,59 +18,102 @@ else
     exit 1
 fi
 
-# 2. 创建 Session
-echo "📦 创建 Session ..."
-SESSION_ID=$(curl -sS -X POST "$BASE_URL/session" -H "Content-Type: application/json" -d '{}' | python3 -c 'import sys, json; print(json.load(sys.stdin)["id"])')
-TEST_SESSION="$SESSION_ID"
+# 2/3. 使用 Node.js 创建 Session、选择 provider/model、发送消息、轮询验证 [SANDBOX]
+echo "📦 创建 Session 并触发沙箱..."
+NODE_OUT="$(BASE_URL="$BASE_URL" node - <<'JS'
+const base = process.env.BASE_URL || "http://localhost:3001";
+const deadlineMs = 20000;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function jsonOrNull(res) {
+  const text = await res.text();
+  try { return JSON.parse(text); } catch { return null; }
+}
+
+async function main() {
+  const createRes = await fetch(`${base}/session`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
+  });
+  const created = await jsonOrNull(createRes);
+  const sessionId = created && typeof created === "object" ? created.id : "";
+  if (!sessionId) {
+    process.stderr.write(`[verify_sandbox] create session failed: ${JSON.stringify(created)}\n`);
+    process.exit(2);
+  }
+
+  const provRes = await fetch(`${base}/provider`);
+  const prov = await jsonOrNull(provRes) || {};
+  const connected = Array.isArray(prov.connected) ? prov.connected : [];
+  const defaults = (prov.default && typeof prov.default === "object") ? prov.default : {};
+  const providerId = connected.includes("deepseek") ? "deepseek" : (connected[0] || "deepseek");
+  const modelId = defaults[providerId] || "deepseek-chat";
+
+  await fetch(`${base}/session/${sessionId}/message`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: { providerID: providerId, modelID: modelId },
+      variant: "verify_sandbox",
+      parts: [{ type: "text", text: "你好，请确认你的沙箱环境，并输出 [SANDBOX] 标记。" }],
+    }),
+  });
+
+  const endAt = Date.now() + deadlineMs;
+  let sandboxLine = "";
+  while (Date.now() < endAt) {
+    try {
+      const msgRes = await fetch(`${base}/session/${sessionId}/message`);
+      const payload = await jsonOrNull(msgRes);
+      const msgs = Array.isArray(payload) ? payload : (payload && Array.isArray(payload.data) ? payload.data : []);
+      for (const m of msgs) {
+        const parts = Array.isArray(m.parts) ? m.parts : [];
+        for (const p of parts) {
+          if (p && p.type === "text" && typeof p.text === "string" && p.text.includes("[SANDBOX]")) {
+            sandboxLine = p.text;
+            break;
+          }
+        }
+        if (sandboxLine) break;
+      }
+      if (sandboxLine) break;
+    } catch {
+    }
+    await sleep(500);
+  }
+
+  const b64 = Buffer.from(sandboxLine, "utf8").toString("base64");
+  process.stdout.write(`${sessionId} ${providerId} ${modelId} ${b64}\n`);
+}
+
+main().catch((err) => {
+  process.stderr.write(`[verify_sandbox] fatal: ${String(err)}\n`);
+  process.exit(2);
+});
+JS
+)"
+NODE_STATUS=$?
+if [ $NODE_STATUS -ne 0 ]; then
+  echo "   ❌ Node 验证脚本执行失败"
+  exit 1
+fi
+
+TEST_SESSION="$(printf '%s' "$NODE_OUT" | awk '{print $1}')"
+PROVIDER_ID="$(printf '%s' "$NODE_OUT" | awk '{print $2}')"
+MODEL_ID="$(printf '%s' "$NODE_OUT" | awk '{print $3}')"
+SANDBOX_B64="$(printf '%s' "$NODE_OUT" | awk '{print $4}')"
+
+if [ -z "$TEST_SESSION" ]; then
+  echo "   ❌ 创建 session 失败"
+  exit 1
+fi
 echo "   ✅ session_id: $TEST_SESSION"
-
-# 3. 选择 provider/model（尽量用 deepseek 的默认模型）
-read -r PROVIDER_ID MODEL_ID < <(curl -sS "$BASE_URL/provider" | python3 - <<'PY'
-import json,sys
-p=json.load(sys.stdin)
-default=p.get("default") or {}
-connected=p.get("connected") or []
-provider_id="deepseek" if "deepseek" in connected else (connected[0] if connected else "deepseek")
-model_id=default.get(provider_id) or "deepseek-chat"
-print(provider_id, model_id)
-PY)
-
 echo "🧪 发送消息到 Session（触发沙箱创建）"
 echo "   - provider/model: $PROVIDER_ID/$MODEL_ID"
-curl -sS -X POST "$BASE_URL/session/$TEST_SESSION/message" \
-  -H "Content-Type: application/json" \
-  -d "$(python3 - <<PY
-import json
-print(json.dumps({
-  "model": {"providerID": "$PROVIDER_ID", "modelID": "$MODEL_ID"},
-  "variant": "verify_sandbox",
-  "parts": [{"type": "text", "text": "你好，请确认你的沙箱环境，并输出 [SANDBOX] 标记。"}]
-}))
-PY)" >/dev/null
 
 echo "⏳ 等待响应并验证 [SANDBOX] 标记..."
-SANDBOX_LINE=$(python3 - <<PY
-import json, time, urllib.request
-base="$BASE_URL"
-sid="$TEST_SESSION"
-deadline=time.time()+20
-while time.time()<deadline:
-    try:
-        data=urllib.request.urlopen(f"{base}/session/{sid}/message", timeout=3).read().decode("utf-8")
-        msgs=json.loads(data) if data.strip().startswith("[") else []
-        for m in msgs:
-            parts=m.get("parts") or []
-            for p in parts:
-                if p.get("type")=="text" and "[SANDBOX]" in (p.get("text") or ""):
-                    print(p.get("text"))
-                    raise SystemExit(0)
-    except SystemExit:
-        raise
-    except Exception:
-        pass
-    time.sleep(0.5)
-raise SystemExit(1)
-PY || true)
+SANDBOX_LINE="$(echo "$SANDBOX_B64" | base64 -D 2>/dev/null || true)"
 
 if [[ "$SANDBOX_LINE" == *"[SANDBOX]"* ]]; then
   echo "   ✅ 找到标记: $SANDBOX_LINE"
