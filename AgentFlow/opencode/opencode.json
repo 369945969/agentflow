@@ -6,6 +6,7 @@
     },
     "plugin": [
         "opencode-mem",
+        "PLUGIN_PATH_PLACEHOLDER",
         "DAYTONA_PLUGIN_PATH_PLACEHOLDER"
     ],
     "model": "deepseek-chat",
