@@ -120,7 +120,7 @@ const handleDelete = async (id: string) => {
         <h1 class="text-2xl font-semibold text-white/95">模型管理</h1>
         <button @click="openCreateModal" class="bg-[#3B9BFF] hover:bg-[#2A7FDB] text-white px-6 py-2.5 rounded-xl flex items-center gap-2 shadow-[0_0_20px_rgba(59,155,255,0.3)] transition-all">
           <iconify-icon icon="lucide:plus" class="text-sm"></iconify-icon>
-          {{ isEditing ? "编辑模型" : "添加新模型" }}
+          {{ isEditing ? "编辑模型" : "添加模型" }}
         </button>
       </div>
 
@@ -173,7 +173,7 @@ const handleDelete = async (id: string) => {
           <div @click="closeCreateModal" class="absolute inset-0 bg-black/60 backdrop-blur-md"></div>
           <div class="relative w-full max-w-lg bg-[#1A2536] border border-white/10 rounded-3xl shadow-2xl overflow-hidden flex flex-col">
             <div class="p-6 border-b border-white/10 flex justify-between items-center bg-white/5">
-              <h2 class="text-xl font-bold text-white/95">{{ isEditing ? "编辑模型" : "添加新模型" }}</h2>
+              <h2 class="text-xl font-bold text-white/95">{{ isEditing ? "编辑模型" : "添加模型" }}</h2>
               <button @click="closeCreateModal" class="w-8 h-8 rounded-full flex items-center justify-center hover:bg-white/10 text-white/40"><iconify-icon icon="lucide:x" class="text-xl"></iconify-icon></button>
             </div>
             <div class="p-8 space-y-4">

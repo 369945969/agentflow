@@ -31,6 +31,8 @@ CREATE TABLE IF NOT EXISTS agents (
     description TEXT, 
     model VARCHAR, 
     system_prompt TEXT, 
+    thinking_enabled BOOLEAN DEFAULT TRUE,
+    simplified_output BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -48,6 +50,10 @@ CREATE TABLE IF NOT EXISTS edges (
 CREATE TABLE IF NOT EXISTS groups (
     id VARCHAR PRIMARY KEY,
     name VARCHAR NOT NULL,
+    group_rule_mode VARCHAR DEFAULT 'free',
+    thinking_enabled BOOLEAN DEFAULT TRUE,
+    simplified_output BOOLEAN DEFAULT FALSE,
+    custom_rule TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -56,4 +62,21 @@ CREATE TABLE IF NOT EXISTS group_members (
     group_id VARCHAR NOT NULL,
     user_id VARCHAR NOT NULL,
     PRIMARY KEY (group_id, user_id)
+);
+
+-- Agent skills table
+CREATE TABLE IF NOT EXISTS agent_skills (
+    agent_id VARCHAR NOT NULL,
+    skill_id VARCHAR NOT NULL,
+    PRIMARY KEY (agent_id, skill_id)
+);
+
+-- Workflows table
+CREATE TABLE IF NOT EXISTS workflows (
+    id VARCHAR PRIMARY KEY,
+    name VARCHAR NOT NULL,
+    description TEXT,
+    graph JSON, -- 存储节点和连线的 JSON 结构
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

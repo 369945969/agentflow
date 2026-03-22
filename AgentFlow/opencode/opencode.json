@@ -7,19 +7,18 @@
     "plugin": [
         "opencode-mem"
     ],
-    "model": "deepseek/deepseek-chat",
-    "small_model": "deepseek/deepseek-chat",
+    "model": "deepseek-chat",
     "provider": {
         "deepseek": {
-            "npm": "@ai-sdk/openai-compatible",
+            "npm": "@ai-sdk/openai",
             "options": {
                 "baseURL": "https://api.deepseek.com/v1",
-                "apiKey": "{env:DEEPSEEK_API_KEY}"
+                "apiKey": "sk-6696ebd5e41f4fd9a1a218b57a85ad6b"
             },
             "models": {
-                "deepseek-reasoning": {
-                    "id": "deepseek-reasoning",
-                    "name": "deepseek-reasoning"
+                "deepseek-chat": {
+                    "id": "deepseek-chat",
+                    "name": "deepseek-chat"
                 }
             }
         }

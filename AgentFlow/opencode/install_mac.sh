@@ -1,15 +1,16 @@
 #!/bin/bash
 
-# OpenCode + DuckDB 自动化安装脚本 (macOS)
+# OpenCode + DuckDB + Daytona + Mem 自动化安装脚本 (macOS)
 # 逻辑：程序检测安装，内容有差异才备份并替换
 set -e
 
 PROJECT_ROOT=$(pwd)
 PLUGIN_DIR="$HOME/.config/opencode/plugins/duckdb-model-router"
+DAYTONA_PLUGIN_DIR="$HOME/.config/opencode/plugins/daytona-sandbox"
 CONFIG_DIR="$HOME/.config/opencode"
 DATE_SUFFIX=$(date +%Y%m%d_%H%M%S)
 
-echo "🚀 开始在 macOS 上安装 OpenCode + DuckDB 环境..."
+echo "🚀 开始在 macOS 上安装 OpenCode 环境..."
 
 # 1. 检查并安装 Homebrew
 if ! command -v brew &> /dev/null; then
@@ -33,7 +34,15 @@ else
     sudo npm install -g opencode
 fi
 
-# 4. 检查并安装 DuckDB CLI
+# 4. 检查并安装 opencode-mem 插件
+if npm list -g opencode-mem &> /dev/null; then
+    echo "✅ opencode-mem 已安装"
+else
+    echo "📦 安装 opencode-mem..."
+    sudo npm install -g opencode-mem
+fi
+
+# 5. 检查并安装 DuckDB CLI
 if command -v duckdb &> /dev/null; then
     echo "✅ DuckDB CLI 已安装: $(duckdb --version)"
 else
@@ -41,19 +50,27 @@ else
     brew install duckdb
 fi
 
-# 5. 创建系统目录结构
+# 6. 检查并安装 Daytona
+if command -v daytona &> /dev/null; then
+    echo "✅ Daytona 已安装: $(daytona --version)"
+else
+    echo "📦 安装 Daytona..."
+    curl -sfL https://download.daytona.io/daytona/install.sh | sudo bash
+fi
+
+# 7. 创建系统目录结构
 echo "📂 检查目录结构..."
 sudo mkdir -p /opt/duckdb
 sudo chmod 777 /opt/duckdb
 mkdir -p "$PLUGIN_DIR"
+mkdir -p "$DAYTONA_PLUGIN_DIR"
 mkdir -p "$CONFIG_DIR"
 
-# 6. 迁移现有的 DuckDB 数据库 (内容比对 + 存在性检查)
+# 8. 迁移现有的 DuckDB 数据库
 echo "🗄️ 检查 DuckDB 数据库状态..."
 TARGET_DB="/opt/duckdb/agentflow.duckdb"
 SOURCE_DB="$PROJECT_ROOT/../backend/apiServer/data/agentflow.duckdb"
 
-# 检查目标数据库中 models 表是否存在的函数
 check_table_exists() {
     if [ ! -f "$1" ]; then return 1; fi
     duckdb "$1" "SELECT count(*) FROM models;" >/dev/null 2>&1
@@ -85,7 +102,7 @@ else
     echo "⚠️  警告: 未找到源数据库文件 $SOURCE_DB"
 fi
 
-# 7. 部署插件和配置文件 (内容比对)
+# 9. 部署插件和配置文件
 echo "🚚 部署插件和配置文件..."
 
 deploy_file() {
@@ -104,34 +121,29 @@ deploy_file() {
     echo "✅ 已更新: $dest"
 }
 
-deploy_content() {
-    local dest=$1
-    local content=$2
-    local tmp="$PROJECT_ROOT/.opencode_tmp_$DATE_SUFFIX"
+# 部署路由插件 (如果被使用)
+# 检查 opencode.json 模板是否包含该插件
+if grep -q "PLUGIN_PATH_PLACEHOLDER" "$PROJECT_ROOT/opencode.json"; then
+    deploy_file "$PROJECT_ROOT/plugin/index.js" "$PLUGIN_DIR/index.js"
+    deploy_file "$PROJECT_ROOT/plugin/package.json" "$PLUGIN_DIR/package.json"
+else
+    echo "🗑️  检测到 duckdb-model-router 未在配置中使用，跳过部署。"
+    # 如果您想删除物理文件，可以解除下面注释
+    # rm -rf "$PLUGIN_DIR"
+fi
 
-    printf "%s" "$content" > "$tmp"
-    if [ -f "$dest" ]; then
-        if cmp -s "$tmp" "$dest"; then
-            echo "ℹ️  文件一致，无需部署: $dest"
-            rm -f "$tmp"
-            return 0
-        else
-            echo "💾 文件有差异，备份旧文件: $dest -> $dest.$DATE_SUFFIX"
-            mv "$dest" "$dest.$DATE_SUFFIX"
-        fi
-    fi
-    mv "$tmp" "$dest"
-    echo "✅ 已更新: $dest"
-}
+# 部署 Daytona 插件
+deploy_file "$PROJECT_ROOT/plugin/daytona-sandbox/index.js" "$DAYTONA_PLUGIN_DIR/index.js"
+deploy_file "$PROJECT_ROOT/plugin/daytona-sandbox/package.json" "$DAYTONA_PLUGIN_DIR/package.json"
 
-deploy_file "$PROJECT_ROOT/plugin/index.js" "$PLUGIN_DIR/index.js"
-deploy_file "$PROJECT_ROOT/plugin/package.json" "$PLUGIN_DIR/package.json"
+# 部署 opencode-mem 配置
+deploy_file "$PROJECT_ROOT/opencode-mem.jsonc" "$CONFIG_DIR/opencode-mem.jsonc"
 
 # 特殊处理 opencode.json 以替换绝对路径
 echo "🚚 部署并配置 opencode.json..."
+sed "s|PLUGIN_PATH_PLACEHOLDER|$PLUGIN_DIR|g; s|DAYTONA_PLUGIN_PATH_PLACEHOLDER|$DAYTONA_PLUGIN_DIR|g" "$PROJECT_ROOT/opencode.json" > "$PROJECT_ROOT/opencode.json.tmp"
+
 if [ -f "$CONFIG_DIR/opencode.json" ]; then
-    # 临时生成一个处理过的版本进行比对
-    sed "s|PLUGIN_PATH_PLACEHOLDER|$PLUGIN_DIR|g" "$PROJECT_ROOT/opencode.json" > "$PROJECT_ROOT/opencode.json.tmp"
     if cmp -s "$PROJECT_ROOT/opencode.json.tmp" "$CONFIG_DIR/opencode.json"; then
         echo "ℹ️  opencode.json 已是最新，无需部署。"
         rm "$PROJECT_ROOT/opencode.json.tmp"
@@ -142,49 +154,14 @@ if [ -f "$CONFIG_DIR/opencode.json" ]; then
         echo "✅ 已更新: $CONFIG_DIR/opencode.json"
     fi
 else
-    sed "s|PLUGIN_PATH_PLACEHOLDER|$PLUGIN_DIR|g" "$PROJECT_ROOT/opencode.json" > "$CONFIG_DIR/opencode.json"
+    mv "$PROJECT_ROOT/opencode.json.tmp" "$CONFIG_DIR/opencode.json"
     echo "✅ 已初始化: $CONFIG_DIR/opencode.json"
 fi
 
-# 8. 安装插件依赖
+# 10. 安装插件依赖
 echo "📦 更新插件依赖..."
-cd "$PLUGIN_DIR"
-npm install
-
-echo "🧠 记忆（opencode-mem）说明："
-echo "   - opencode-mem 是一个 OpenCode npm 插件，会在 opencode 启动时由 Bun 自动安装"
-echo "   - 存储在本地 SQLite（无单独 mem0 服务）"
-echo "   - 记忆按请求 body 的 variant 作为 user_id 进行隔离"
-echo "   - 需要配置 DEEPSEEK_API_KEY（用于 deepseek provider 与记忆提取）"
-
-OPENCODE_MEM_CONFIG_PATH="$CONFIG_DIR/opencode-mem.jsonc"
-OPENCODE_MEM_CONFIG_CONTENT='{
-  // OpenCode memory plugin: opencode-mem
-  // Repo: https://github.com/tickernelz/opencode-mem
-
-  "storagePath": "~/.opencode-mem/data",
-  "webServerEnabled": true,
-  "webServerPort": 4747,
-
-  "autoCaptureEnabled": true,
-  "autoCaptureLanguage": "auto",
-
-  // Use DeepSeek (OpenAI-compatible) for memory extraction.
-  // API key supports formats like env://DEEPSEEK_API_KEY
-  "memoryProvider": "openai-chat",
-  "memoryModel": "deepseek-chat",
-  "memoryApiUrl": "https://api.deepseek.com/v1",
-  "memoryApiKey": "env://DEEPSEEK_API_KEY",
-
-  "chatMessage": {
-    "enabled": true,
-    "maxMemories": 3,
-    "excludeCurrentSession": true,
-    "injectOn": "first"
-  }
-}
-'
-deploy_content "$OPENCODE_MEM_CONFIG_PATH" "$OPENCODE_MEM_CONFIG_CONTENT"
+[ -d "$PLUGIN_DIR" ] && cd "$PLUGIN_DIR" && npm install
+[ -d "$DAYTONA_PLUGIN_DIR" ] && cd "$DAYTONA_PLUGIN_DIR" && npm install
 
 echo "✨ macOS 安装与更新完成！"
-echo "💡 运行 'opencode serve' 启动服务。"
+echo "💡 运行 'bash start_opencode.sh' 启动服务。"

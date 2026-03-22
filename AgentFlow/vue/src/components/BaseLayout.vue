@@ -10,10 +10,10 @@ const isSidebarCollapsed = ref(false)
 // Frequently used items (Top section)
 const primaryNavItems = [
   { name: '系统监控', icon: 'lucide:layout-dashboard', path: '/' },
-  { name: '数字员工', icon: 'lucide:bot', path: '/agent-management' },
   { name: '单人对话', icon: 'lucide:user', path: '/single-person-chat' },
   { name: '多人对话', icon: 'lucide:message-square', path: '/multi-person-chat' },
-  { name: '编排画布', icon: 'lucide:workflow', path: '/orchestration-editor' },
+  { name: '编排画布', icon: 'lucide:workflow', path: '/orchestration-list' },
+  { name: '数字员工', icon: 'lucide:bot', path: '/agent-management' },
   { name: '定时任务', icon: 'lucide:calendar', path: '/schedule-tasks' },
 ]
 
@@ -43,22 +43,10 @@ const toggleSidebar = () => {
             </div>
             <span style="color: color-mix(in oklab, #fff 95%, transparent);" class="text-xl font-semibold">AgentFlow</span>
           </div>
-          <div style="background-color: color-mix(in oklab, #fff 5%, transparent); backdrop-filter: blur(24px); padding: 0.5rem 1rem; border-color: color-mix(in oklab, #3B9BFF 30%, transparent);" class="flex items-center min-w-[300px] border-[1px] border-solid rounded-xl">
-            <div class="flex justify-center items-center w-5 h-5 mr-3">
-              <iconify-icon style="color: color-mix(in oklab, #fff 50%, transparent);" icon="lucide:search" class="text-base"></iconify-icon>
-            </div>
-            <input style="flex-basis: 0%; color: color-mix(in oklab, #fff 70%, transparent);" type="text" placeholder="搜索Agent、编排或任务..." class="bg-transparent grow shrink outline-none">
-          </div>
         </div>
         <div class="flex items-center gap-4">
-          <button class="hover:border-[#5FB4FF]/50 hover:shadow-[0_0_20px_rgba(59,155,255,0.3)] flex items-center gap-2 border-[1px] border-solid rounded-xl" style="background-color: color-mix(in oklab, #fff 5%, transparent); backdrop-filter: blur(24px); padding: 0.5rem 1rem; border-color: color-mix(in oklab, #3B9BFF 30%, transparent);">
-            <div class="flex justify-center items-center w-4 h-4">
-              <iconify-icon style="color: rgba(95, 180, 255, 1);" icon="lucide:plus" class="text-sm"></iconify-icon>
-            </div>
-            <span style="color: color-mix(in oklab, #fff 95%, transparent);" class="text-sm whitespace-nowrap">新建</span>
-          </button>
           <div class="flex relative justify-center items-center w-12 h-12">
-            <button class="hover:border-[#5FB4FF]/50 flex justify-center items-center w-10 h-10 border-[1px] border-solid rounded-xl" style="background-color: color-mix(in oklab, #fff 5%, transparent); backdrop-filter: blur(24px); border-color: color-mix(in oklab, #3B9BFF 30%, transparent);">
+            <button class="hover:border-[#5FB4FF]/50 flex justify-center items-center w-10 h-10 border-[1px] border-solid rounded-xl" style="background-color: color-mix(in oklab, #fff 5%, transparent); backdrop-filter: blur(24px); border-color: color-mix(in oklab, #3B9BFF 30% , transparent);">
               <div class="flex justify-center items-center w-5 h-5">
                 <iconify-icon style="color: color-mix(in oklab, #fff 70%, transparent);" icon="lucide:bell" class="text-base"></iconify-icon>
               </div>

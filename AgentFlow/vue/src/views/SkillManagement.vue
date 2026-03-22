@@ -3,9 +3,10 @@ import { ref, onMounted } from 'vue'
 import BaseLayout from '../components/BaseLayout.vue'
 import { API_BASE_URL } from '../config/api'
 
-const isDrawerOpen = ref(false)
 const isInstallDrawerOpen = ref(false)
 const installUrl = ref('')
+const selectedFile = ref<File | null>(null)
+const fileInput = ref<HTMLInputElement | null>(null)
 const isInstalling = ref(false)
 
 const skills = ref<any[]>([])
@@ -28,31 +29,52 @@ onMounted(() => {
   fetchSkills()
 })
 
-const openCreateDrawer = () => isDrawerOpen.value = true
-const openInstallDrawer = () => isInstallDrawerOpen.value = true
+const openInstallDrawer = () => {
+  isInstallDrawerOpen.value = true
+}
 
 const closeDrawers = () => {
-  isDrawerOpen.value = false
   isInstallDrawerOpen.value = false
   installUrl.value = ''
+  selectedFile.value = null
   isInstalling.value = false
 }
 
+const onFileSelected = (event: Event) => {
+  const target = event.target as HTMLInputElement
+  if (target.files && target.files.length > 0) {
+    selectedFile.value = target.files[0]
+    installUrl.value = '' // Clear URL if file is selected
+  }
+}
+
 const handleInstall = async () => {
-  if (!installUrl.value) return
+  if (!installUrl.value && !selectedFile.value) return
   isInstalling.value = true
+  
   try {
+    const formData = new FormData()
+    if (selectedFile.value) {
+      formData.append('file', selectedFile.value)
+    } else {
+      formData.append('url', installUrl.value)
+    }
+
     const response = await fetch(`${API_BASE_URL}/api/skills/install`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: installUrl.value })
+      body: formData
     })
+    
     if (response.ok) {
       await fetchSkills()
       closeDrawers()
+    } else {
+      const err = await response.json()
+      alert(`安装失败: ${err.error || '未知错误'}`)
     }
   } catch (error) {
     console.error('Installation failed:', error)
+    alert('安装过程中发生错误')
   } finally {
     isInstalling.value = false
   }
@@ -116,21 +138,13 @@ const closeDetailModal = () => {
           <p class="text-xs text-white/40">定义和管理平台可用的标准技能，可供 Agent 绑定使用</p>
         </div>
         <div class="flex items-center gap-3">
-          <!-- Add New Button -->
-          <button 
-            @click="openCreateDrawer"
-            class="bg-white/5 hover:bg-white/10 text-white/80 px-5 py-2.5 rounded-xl flex items-center gap-2 border border-white/10 transition-all active:scale-95"
-          >
-            <iconify-icon icon="lucide:plus" class="text-lg"></iconify-icon>
-            <span class="text-sm font-semibold">开发新技能</span>
-          </button>
           <!-- Install Button -->
           <button 
             @click="openInstallDrawer"
             class="bg-[#3B9BFF] hover:bg-[#2A7FDB] text-white px-5 py-2.5 rounded-xl flex items-center gap-2 shadow-[0_0_15px_rgba(59,155,255,0.3)] transition-all active:scale-95"
           >
             <iconify-icon icon="lucide:download-cloud" class="text-lg"></iconify-icon>
-            <span class="text-sm font-semibold">安装新技能</span>
+            <span class="text-sm font-semibold">安装技能</span>
           </button>
         </div>
       </div>
@@ -169,50 +183,7 @@ const closeDetailModal = () => {
         </div>
       </div>
 
-      <!-- Drawer 1: Add New Skill (Manual) -->
-      <Transition 
-        enter-active-class="transition duration-300 ease-out" enter-from-class="translate-x-full" enter-to-class="translate-x-0"
-        leave-active-class="transition duration-200 ease-in" leave-from-class="translate-x-0" leave-to-class="translate-x-full"
-      >
-        <aside v-if="isDrawerOpen" class="fixed top-0 right-0 w-[560px] h-full z-[100] bg-[#1A2536]/98 backdrop-blur-3xl border-l border-[#3B9BFF]/30 shadow-[-20px_0_50px_rgba(0,0,0,0.5)] flex flex-col">
-          <div class="p-6 border-b border-white/10 flex justify-between items-center">
-            <h2 class="text-xl font-bold text-white/95">开发新技能</h2>
-            <button @click="closeDrawers" class="w-10 h-10 rounded-full flex items-center justify-center hover:bg-white/5 text-white/40"><iconify-icon icon="lucide:x" class="text-xl"></iconify-icon></button>
-          </div>
-          <div class="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar">
-            <div class="grid grid-cols-2 gap-6">
-              <div class="space-y-2">
-                <label class="text-[10px] text-white/40 font-bold uppercase tracking-widest">技能内部名称</label>
-                <input type="text" placeholder="my_new_skill" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-[#3B9BFF]/50 transition-all font-mono">
-              </div>
-              <div class="space-y-2">
-                <label class="text-[10px] text-white/40 font-bold uppercase tracking-widest">显示版本</label>
-                <input type="text" value="v1.0.0" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:border-[#3B9BFF]/50 transition-all font-mono">
-              </div>
-            </div>
-            <div class="space-y-2">
-              <label class="text-[10px] text-white/40 font-bold uppercase tracking-widest">技能描述</label>
-              <textarea placeholder="简述该技能的功能和输入输出..." rows="3" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-[#3B9BFF]/50 transition-all resize-none"></textarea>
-            </div>
-            <div class="space-y-4 pt-2 border-t border-white/5">
-              <div class="flex justify-between items-center">
-                <label class="text-[10px] text-white/40 font-bold uppercase tracking-widest">核心逻辑 (Python)</label>
-                <button class="text-[10px] text-[#3B9BFF] hover:underline">加载示例代码</button>
-              </div>
-              <div class="bg-[#0F1928] border border-white/10 rounded-xl overflow-hidden shadow-inner">
-                <textarea class="w-full h-80 p-4 text-[11px] font-mono text-[#5FB4FF] bg-transparent outline-none resize-none" spellcheck="false">def handler(params, context):
-    pass</textarea>
-              </div>
-            </div>
-          </div>
-          <div class="p-6 border-t border-white/10 bg-white/5 backdrop-blur-md flex gap-4">
-            <button @click="closeDrawers" class="flex-1 py-3 rounded-xl border border-white/10 text-sm text-white/60 hover:bg-white/5">取消</button>
-            <button class="flex-1 py-3 rounded-xl bg-[#3B9BFF] text-white text-sm font-bold shadow-[0_0_20px_rgba(59,155,255,0.4)]">保存至技能库</button>
-          </div>
-        </aside>
-      </Transition>
-
-      <!-- Drawer 2: Install Skill (via URL) -->
+      <!-- Drawer: Install Skill (via URL or ZIP) -->
       <Transition 
         enter-active-class="transition duration-300 ease-out" enter-from-class="translate-x-full" enter-to-class="translate-x-0"
         leave-active-class="transition duration-200 ease-in" leave-from-class="translate-x-0" leave-to-class="translate-x-full"
@@ -220,45 +191,67 @@ const closeDetailModal = () => {
         <aside v-if="isInstallDrawerOpen" class="fixed top-0 right-0 w-[500px] h-full z-[100] bg-[#1A2536]/98 backdrop-blur-3xl border-l border-[#3B9BFF]/30 shadow-[-20px_0_50px_rgba(0,0,0,0.5)] flex flex-col">
           <div class="p-6 border-b border-white/10 flex justify-between items-center">
             <div>
-              <h2 class="text-xl font-bold text-white/95">安装远程技能</h2>
-              <p class="text-[10px] text-white/30 uppercase tracking-widest mt-1">Import skill from external URL</p>
+              <h2 class="text-xl font-bold text-white/95">安装技能</h2>
+              <p class="text-[10px] text-white/30 uppercase tracking-widest mt-1">Import skill from external URL or ZIP file</p>
             </div>
             <button @click="closeDrawers" class="w-10 h-10 rounded-full flex items-center justify-center hover:bg-white/5 text-white/40"><iconify-icon icon="lucide:x" class="text-xl"></iconify-icon></button>
           </div>
           <div class="flex-1 p-8 space-y-8">
-            <div class="space-y-4">
-              <label class="text-[10px] text-white/40 font-bold uppercase tracking-widest">技能包 HTTP(S) 地址</label>
+            <!-- URL Section -->
+            <div class="space-y-4" :class="selectedFile ? 'opacity-40 grayscale' : ''">
+              <label class="text-[10px] text-white/40 font-bold uppercase tracking-widest">远程安装 (URL)</label>
               <div class="relative">
                 <div class="absolute inset-y-0 left-4 flex items-center pointer-events-none text-white/30"><iconify-icon icon="lucide:link"></iconify-icon></div>
                 <input 
                   v-model="installUrl"
                   type="text" 
+                  :disabled="!!selectedFile"
                   placeholder="https://api.skills.com/package.json" 
                   class="w-full bg-white/5 border border-white/10 rounded-xl pl-12 pr-4 py-4 text-sm text-white outline-none focus:border-[#3B9BFF]/50 transition-all font-mono"
                 >
               </div>
-              <p class="text-[10px] text-white/20 italic">平台将尝试访问该地址，识别技能清单、图标及执行逻辑并自动完成安装。</p>
             </div>
 
-            <div v-if="isInstalling" class="flex flex-col items-center justify-center py-12 gap-4">
+            <div class="relative py-4 flex items-center">
+              <div class="flex-grow border-t border-white/10"></div>
+              <span class="flex-shrink mx-4 text-white/20 text-[10px] font-bold uppercase">或者</span>
+              <div class="flex-grow border-t border-white/10"></div>
+            </div>
+
+            <!-- ZIP Section -->
+            <div class="space-y-4" :class="installUrl ? 'opacity-40 grayscale' : ''">
+              <label class="text-[10px] text-white/40 font-bold uppercase tracking-widest">本地上传 (.ZIP)</label>
+              <div @click="!installUrl && fileInput?.click()" class="border-2 border-dashed border-white/10 rounded-2xl p-8 flex flex-col items-center justify-center gap-3 hover:bg-white/5 hover:border-[#3B9BFF]/30 cursor-pointer transition-all" :class="selectedFile ? 'border-[#3B9BFF]/50 bg-[#3B9BFF]/5' : ''">
+                <iconify-icon :icon="selectedFile ? 'lucide:file-archive' : 'lucide:upload-cloud'" class="text-3xl" :class="selectedFile ? 'text-[#3B9BFF]' : 'text-white/20'"></iconify-icon>
+                <div class="text-center">
+                  <p class="text-sm text-white/60 font-medium">{{ selectedFile ? selectedFile.name : '点击上传 ZIP 压缩包' }}</p>
+                  <p v-if="selectedFile" class="text-[10px] text-[#3B9BFF] mt-1">{{ (selectedFile.size / 1024 / 1024).toFixed(2) }} MB</p>
+                  <p v-else class="text-[10px] text-white/20 mt-1">支持标准的 Skill 插件格式</p>
+                </div>
+                <input ref="fileInput" type="file" accept=".zip" class="hidden" @change="onFileSelected">
+              </div>
+              <button v-if="selectedFile" @click.stop="selectedFile = null" class="text-[10px] text-red-400/60 hover:text-red-400 transition-colors uppercase font-bold tracking-widest">移除文件</button>
+            </div>
+
+            <div v-if="isInstalling" class="flex flex-col items-center justify-center py-6 gap-4">
                <iconify-icon icon="lucide:loader-2" class="text-4xl text-[#3B9BFF] animate-spin"></iconify-icon>
-               <span class="text-sm text-white/50 animate-pulse">正在拉取并解析技能包...</span>
+               <span class="text-sm text-white/50 animate-pulse">正在处理技能包...</span>
             </div>
           </div>
           <div class="p-6 border-t border-white/10 bg-white/5 backdrop-blur-md flex gap-4">
             <button @click="closeDrawers" class="flex-1 py-3 rounded-xl border border-white/10 text-sm text-white/60 hover:bg-white/5">取消</button>
             <button 
               @click="handleInstall"
-              :disabled="!installUrl || isInstalling"
+              :disabled="(!installUrl && !selectedFile) || isInstalling"
               class="flex-1 py-3 rounded-xl bg-[#3B9BFF] text-white text-sm font-bold shadow-[0_0_20px_rgba(59,155,255,0.4)] disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             >
-              {{ isInstalling ? '安装中...' : '开始安装' }}
+              {{ isInstalling ? '安装中...' : '确认安装' }}
             </button>
           </div>
         </aside>
       </Transition>
       
-      <!-- Drawer 4: Delete Confirmation Modal -->
+      <!-- Delete Confirmation Modal -->
       <Transition 
         enter-active-class="transition duration-300 ease-out" enter-from-class="opacity-0 scale-95" enter-to-class="opacity-100 scale-100"
         leave-active-class="transition duration-200 ease-in" leave-from-class="opacity-100 scale-100" leave-to-class="opacity-0 scale-95"
@@ -293,7 +286,7 @@ const closeDetailModal = () => {
       </Transition>
 
 
-      <!-- Drawer 3: Skill Details Modal -->
+      <!-- Skill Details Modal -->
       <Transition 
         enter-active-class="transition duration-300 ease-out" enter-from-class="opacity-0 scale-95" enter-to-class="opacity-100 scale-100"
         leave-active-class="transition duration-200 ease-in" leave-from-class="opacity-100 scale-100" leave-to-class="opacity-0 scale-95"
@@ -330,7 +323,7 @@ const closeDetailModal = () => {
       </Transition>
 
 
-      <div v-if="isDrawerOpen || isInstallDrawerOpen || isDetailModalOpen || isDeleteModalOpen" @click="closeDeleteModal(); closeDetailModal(); closeDrawers();" class="fixed inset-0 bg-black/40 backdrop-blur-sm z-[80]"></div>
+      <div v-if="isInstallDrawerOpen || isDetailModalOpen || isDeleteModalOpen" @click="closeDeleteModal(); closeDetailModal(); closeDrawers();" class="fixed inset-0 bg-black/40 backdrop-blur-sm z-[80]"></div>
     </main>
   </BaseLayout>
 </template>

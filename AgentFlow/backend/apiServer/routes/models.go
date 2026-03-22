@@ -29,7 +29,7 @@ func getModels(c *gin.Context) {
 	}
 	defer rows.Close()
 
-	var modelsList []models.Model
+	modelsList := []models.Model{}
 	for rows.Next() {
 		var m models.Model
 		if err := rows.Scan(&m.ID, &m.Name, &m.Provider, &m.BaseURL, &m.APIKey, &m.ModelName, &m.Description, &m.IsDefault, &m.CreatedAt); err != nil {

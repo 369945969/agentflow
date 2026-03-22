@@ -31,7 +31,11 @@ func main() {
 	r := gin.Default()
 
 	// CORS configuration
-	r.Use(cors.Default())
+	corsConfig := cors.DefaultConfig()
+	corsConfig.AllowAllOrigins = true
+	corsConfig.AllowMethods = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}
+	corsConfig.AllowHeaders = []string{"Origin", "Content-Length", "Content-Type", "X-User-ID", "X-Model-ID"}
+	r.Use(cors.New(corsConfig))
 
 	// Health check
 	r.GET("/health", func(c *gin.Context) {
@@ -46,6 +50,7 @@ func main() {
 	routes.RegisterAgentRoutes(r)
 	routes.RegisterModelRoutes(r)
 	routes.RegisterGroupRoutes(r)
+	routes.RegisterWorkflowRoutes(r)
 
 	// Start server
 	port := config.AppConfig.Server.Port

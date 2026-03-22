@@ -34,6 +34,7 @@ type Agent struct {
 	ThinkingEnabled  bool      `json:"thinking_enabled,omitempty" db:"thinking_enabled"`
 	SimplifiedOutput bool      `json:"simplified_output,omitempty" db:"simplified_output"`
 	CreatedAt        time.Time `json:"created_at" db:"created_at"`
+	Skills           []string  `json:"skills"` // Bound skill IDs
 }
 
 type Edge struct {

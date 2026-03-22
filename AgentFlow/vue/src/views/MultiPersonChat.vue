@@ -22,6 +22,7 @@ const rightSidebarCollapsed = ref(true) // 控制右侧边栏是否收起
 const leftSidebarCollapsed = ref(false) // 控制左侧边栏是否收起，默认展开
 const leftSidebarWidth = ref(320) // 左侧边栏宽度，可拖动调整
 const isDragging = ref(false) // 是否正在拖动分隔线
+const isInitializing = ref(false)
 
 // Computed properties
 const activeGroup = computed(() => {
@@ -223,15 +224,23 @@ const deleteGroup = async (groupId: string, event: Event) => {
 const updateSettingsFromActiveGroup = () => {
   const group = activeGroup.value
   if (group) {
+    isInitializing.value = true
     groupRuleMode.value = group.group_rule_mode || 'free'
-    thinkingEnabled.value = group.thinking_enabled || false
+    thinkingEnabled.value = group.thinking_enabled !== undefined ? group.thinking_enabled : true
     simplifiedOutput.value = group.simplified_output || false
     customRuleText.value = group.custom_rule || ''
+    
+    // 延迟重置标识，确保 watcher 触发后的调用被跳过
+    setTimeout(() => {
+      isInitializing.value = false
+    }, 100)
   }
 }
 
 // 保存群组设置到后端
 const saveGroupSettings = async () => {
+  if (isInitializing.value) return
+  
   const groupId = activeGroupId.value
   if (!groupId) return
   

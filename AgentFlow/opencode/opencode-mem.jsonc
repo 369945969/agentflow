@@ -1,0 +1,13 @@
+{
+  "model": "deepseek-chat",
+  "provider": "openai",
+  "baseURL": "https://api.deepseek.com/v1",
+  "apiKey": "env://DEEPSEEK_API_KEY",
+  "database": {
+    "type": "sqlite",
+    "path": "~/.config/opencode/opencode-mem.db"
+  },
+  "vector": {
+    "type": "local"
+  }
+}
