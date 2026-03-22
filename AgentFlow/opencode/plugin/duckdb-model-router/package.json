@@ -1,7 +1,11 @@
 {
-  "name": "duckdb-model-router",
-  "version": "1.0.0",
-  "main": "index.js",
-  "type": "module",
-  "description": "DuckDB model router plugin placeholder"
+    "name": "duckdb-model-router",
+    "version": "1.0.0",
+    "main": "index.js",
+    "type": "module",
+    "dependencies": {
+        "duckdb": "^1.0.0",
+        "@ai-sdk/openai-compatible": "^1.0.0"
+    },
+    "description": "OpenCode 插件：基于 DuckDB 实现按 UserID 动态路由多模型"
 }
