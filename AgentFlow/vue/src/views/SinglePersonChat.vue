@@ -723,7 +723,7 @@ const upsertAgentMessage = (message: ServerMessage) => {
     const cleanAnswer = trimTrailingBlankLines(trimLeadingBlankLines(stripMemoryLines(finalContent || '')))
 
     const placeholder = messages.value.find((item: any) => item.type === 'agent' && item.streamKey === answerKey && item.isPlaceholder)
-    if (placeholder) {
+    if (placeholder && placeholder !== answerMessage) {
       messages.value = messages.value.filter((m: any) => !(m.type === 'agent' && m.streamKey === answerKey && m.isPlaceholder))
     }
 
