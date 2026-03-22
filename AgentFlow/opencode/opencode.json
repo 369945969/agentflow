@@ -5,7 +5,8 @@
         "cors": []
     },
     "plugin": [
-        "opencode-mem"
+        "opencode-mem",
+        "plugins/daytona-sandbox"
     ],
     "model": "deepseek-chat",
     "provider": {

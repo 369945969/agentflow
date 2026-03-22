@@ -1,56 +1,83 @@
-const { execSync } = require('child_process');
+import { execSync } from "node:child_process";
+import { tool } from "@opencode-ai/plugin";
 
-// 缓存已创建的工作区 ID
 const activeWorkspaces = new Set();
 
 async function ensureWorkspace(sessionId) {
-    const workspaceId = `opencode-${sessionId}`;
-    if (activeWorkspaces.has(workspaceId)) return workspaceId;
+  const workspaceId = `opencode-${sessionId}`;
+  if (activeWorkspaces.has(workspaceId)) return workspaceId;
 
-    try {
-        console.log(`[Daytona] 正在为会话 ${sessionId} 创建沙箱工作区...`);
-        // 检查工作区是否已存在
-        const list = execSync('daytona list').toString();
-        if (!list.includes(workspaceId)) {
-            // 使用默认的 starter 模板创建工作区
-            // 注意：这里假设 daytona 已经配置好默认 target
-            execSync(`daytona create ${workspaceId} --non-interactive`);
-        }
-        activeWorkspaces.add(workspaceId);
-        return workspaceId;
-    } catch (error) {
-        console.error(`[Daytona] 创建工作区失败: ${error.message}`);
-        return null;
-    }
+  const list = execSync("daytona list", { stdio: ["ignore", "pipe", "pipe"] }).toString();
+  if (!list.includes(workspaceId)) {
+    execSync(`daytona create ${workspaceId} --non-interactive`, {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+  }
+  activeWorkspaces.add(workspaceId);
+  return workspaceId;
 }
 
-module.exports = function(pluginContext) {
-    return {
-        name: 'daytona-sandbox',
-        version: '1.0.0',
-        hooks: {
-            'sse.message': async (context) => {
-                const sessionId = context.request.headers['x-session-id'] || context.sessionID;
-                if (!sessionId) return context;
+export default async function DaytonaSandboxPlugin(ctx) {
+  const { directory } = ctx;
+  return {
+    "chat.message": async (input, output) => {
+      const sessionId = input.sessionID;
+      if (!sessionId) return;
 
-                const workspaceId = await ensureWorkspace(sessionId);
-                if (workspaceId) {
-                    // 告诉 OpenCode 后续的代码执行应该在这个 Daytona 工作区中进行
-                    // 注意：这需要 OpenCode 的执行引擎支持从 context.execution 获取 target
-                    context.execution = {
-                        type: 'daytona',
-                        workspaceId: workspaceId
-                    };
-                    
-                    if (context.response && context.response.messages) {
-                        context.response.messages.push({
-                            role: 'system',
-                            content: `[SANDBOX] 隔离环境已就绪: ${workspaceId}`
-                        });
-                    }
-                }
-                return context;
-            }
+      let workspaceId = null;
+      try {
+        workspaceId = await ensureWorkspace(sessionId);
+      } catch (error) {
+        const msg = `[SANDBOX_ERROR] ${String(error)}`;
+        if (output?.parts) {
+          output.parts.unshift({
+            id: `prt-sandbox-${Date.now()}`,
+            sessionID: sessionId,
+            messageID: output.message?.id,
+            type: "text",
+            text: msg,
+            synthetic: true,
+          });
         }
-    };
-};
+        return;
+      }
+
+      if (!workspaceId) return;
+
+      const text = `[SANDBOX] 隔离环境已就绪: ${workspaceId}`;
+      if (output?.parts) {
+        output.parts.unshift({
+          id: `prt-sandbox-${Date.now()}`,
+          sessionID: sessionId,
+          messageID: output.message?.id,
+          type: "text",
+          text,
+          synthetic: true,
+        });
+      }
+    },
+    tool: {
+      sandbox: tool({
+        description: "Create or get a Daytona sandbox workspace bound to current session.",
+        args: {
+          action: tool.schema.enum(["ensure", "status"]).optional(),
+        },
+        async execute(args, toolCtx) {
+          const sessionId = toolCtx?.sessionID;
+          if (!sessionId) {
+            return { ok: false, error: "missing sessionID" };
+          }
+          const workspaceId = await ensureWorkspace(sessionId);
+          if (args?.action === "status") {
+            const list = execSync("daytona list", { stdio: ["ignore", "pipe", "pipe"] }).toString();
+            return { ok: true, workspaceId, listed: list.includes(workspaceId) };
+          }
+          return { ok: true, workspaceId };
+        },
+      }),
+    },
+    meta: {
+      directory,
+    },
+  };
+}

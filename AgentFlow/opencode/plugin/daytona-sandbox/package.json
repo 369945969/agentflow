@@ -2,5 +2,9 @@
     "name": "daytona-sandbox",
     "version": "1.0.0",
     "main": "index.js",
-    "description": "OpenCode 插件：基于 Daytona 实现 Session 级别的代码执行沙箱"
+    "type": "module",
+    "description": "OpenCode 插件：基于 Daytona 实现 Session 级别的代码执行沙箱",
+    "dependencies": {
+        "@opencode-ai/plugin": "^1.0.162"
+    }
 }
