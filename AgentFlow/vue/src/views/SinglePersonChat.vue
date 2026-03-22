@@ -275,23 +275,11 @@ const inputText = ref('')
 const isConnected = ref(false)
 const typingQueues = new Map<string, Promise<void>>()
 const collapsedAssistant = ref<Record<string, boolean>>({})
-const collapsedThinking = ref<Record<string, boolean>>({})
-const collapsedReply = ref<Record<string, boolean>>({})
 
 const isAssistantCollapsed = (baseId: string) => Boolean(collapsedAssistant.value[baseId])
-const isThinkingCollapsed = (baseId: string) => Boolean(collapsedThinking.value[baseId])
-const isReplyCollapsed = (baseId: string) => Boolean(collapsedReply.value[baseId])
 
 const toggleAssistantCollapse = (baseId: string) => {
   collapsedAssistant.value = { ...collapsedAssistant.value, [baseId]: !isAssistantCollapsed(baseId) }
-}
-
-const toggleThinkingCollapse = (baseId: string) => {
-  collapsedThinking.value = { ...collapsedThinking.value, [baseId]: !isThinkingCollapsed(baseId) }
-}
-
-const toggleReplyCollapse = (baseId: string) => {
-  collapsedReply.value = { ...collapsedReply.value, [baseId]: !isReplyCollapsed(baseId) }
 }
 
 const messageGroups = computed(() => {
@@ -692,11 +680,6 @@ const upsertAgentMessage = (message: ServerMessage) => {
     const thinkingContent = typeof (payload as any).thinking_content === 'string' ? (payload as any).thinking_content : ''
     const finalContent = typeof (payload as any).content === 'string' ? (payload as any).content : ''
 
-    const placeholder = messages.value.find((item: any) => item.type === 'agent' && item.streamKey === answerKey && item.isPlaceholder)
-    if (placeholder) {
-      messages.value = messages.value.filter((m: any) => !(m.type === 'agent' && m.streamKey === answerKey && m.isPlaceholder))
-    }
-
     let thinkingMessage = messages.value.find((item: any) => item.type === 'agent' && item.streamKey === thinkingKey)
     if (thinkingContent) {
       if (!thinkingMessage) {
@@ -739,11 +722,31 @@ const upsertAgentMessage = (message: ServerMessage) => {
     const cleanThinking = trimTrailingBlankLines(trimLeadingBlankLines(stripMemoryLines(thinkingContent || '')))
     const cleanAnswer = trimTrailingBlankLines(trimLeadingBlankLines(stripMemoryLines(finalContent || '')))
 
-    if (thinkingMessage && thinkingContent) {
-      await typeOut(thinkingMessage, cleanThinking)
-      scrollThinkingViewport(thinkingKey)
+    const placeholder = messages.value.find((item: any) => item.type === 'agent' && item.streamKey === answerKey && item.isPlaceholder)
+    if (placeholder) {
+      messages.value = messages.value.filter((m: any) => !(m.type === 'agent' && m.streamKey === answerKey && m.isPlaceholder))
     }
-    await typeOut(answerMessage, cleanAnswer)
+
+    try {
+      if (thinkingMessage && thinkingContent) {
+        await typeOut(thinkingMessage, cleanThinking)
+        scrollThinkingViewport(thinkingKey)
+      }
+      await typeOut(answerMessage, cleanAnswer)
+    } catch {
+      if (thinkingMessage && thinkingContent) {
+        thinkingMessage.isAnimating = false
+        thinkingMessage.isStreaming = false
+        thinkingMessage.isFinal = true
+        thinkingMessage.content = cleanThinking
+      }
+      answerMessage.isAnimating = false
+      answerMessage.isStreaming = false
+      answerMessage.isFinal = true
+      answerMessage.content = cleanAnswer
+      scheduleMermaidRender()
+      schedulePersist()
+    }
   }
 
   const chain = (typingQueues.get(baseId) || Promise.resolve()).then(finalize).finally(() => {
@@ -1185,61 +1188,43 @@ onBeforeUnmount(() => {
                 <div v-if="group.kind === 'assistant'" class="w-full max-w-[760px] space-y-3 text-[13px]">
                 <!-- Original Message Container -->
                 <div class="relative max-w-[760px] rounded-2xl p-4 border bg-white/10 text-white/90 border-white/10">
-                  <div class="mb-3 flex items-center gap-2">
-                    <div class="w-8 h-8 rounded-lg bg-[#3B9BFF]/20 flex items-center justify-center text-[#3B9BFF] font-bold text-xs">
-                      {{ selectedUser ? selectedUser.name.charAt(0) : 'AI' }}
+                  <div class="mb-3 flex items-center justify-between gap-2">
+                    <div class="flex items-center gap-2">
+                      <div class="w-8 h-8 rounded-lg bg-[#3B9BFF]/20 flex items-center justify-center text-[#3B9BFF] font-bold text-xs">
+                        {{ selectedUser ? selectedUser.name.charAt(0) : 'AI' }}
+                      </div>
+                      <span class="text-xs font-semibold text-white/80">
+                        {{ selectedUser ? selectedUser.name : 'AI 助手' }}
+                      </span>
                     </div>
-                    <span class="text-xs font-semibold text-white/80">
-                      {{ selectedUser ? selectedUser.name : 'AI 助手' }}
-                    </span>
+                    <button class="h-8 w-8 rounded-lg hover:bg-white/10" @click="toggleAssistantCollapse(group.baseId)">
+                      <iconify-icon :icon="isAssistantCollapsed(group.baseId) ? 'lucide:chevrons-down' : 'lucide:chevrons-up'" class="text-base"></iconify-icon>
+                    </button>
                   </div>
                   
                   <!-- Merged Thinking and Reply -->
                   <div v-if="isAssistantCollapsed(group.baseId)" class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/70">
-                    <div class="flex items-center justify-between">
-                      <span>已收拢</span>
-                      <button class="h-8 w-8 rounded-lg hover:bg-white/10" @click="toggleAssistantCollapse(group.baseId)">
-                        <iconify-icon icon="lucide:chevrons-down" class="text-base"></iconify-icon>
-                      </button>
-                    </div>
+                    内容已收拢
                   </div>
                   <template v-else>
                     <div v-if="group.thinking && (group.thinking.isAnimating || hasMeaningfulThinking(group.thinking))" class="mb-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-100/70">
-                      <div class="flex items-center justify-between gap-2">
-                        <div class="font-bold mb-1 flex items-center gap-2 text-xs"><iconify-icon icon="lucide:brain-circuit"></iconify-icon>推理过程</div>
-                        <button class="h-8 w-8 rounded-lg hover:bg-white/10" @click="toggleThinkingCollapse(group.baseId)">
-                          <iconify-icon :icon="isThinkingCollapsed(group.baseId) ? 'lucide:chevrons-down' : 'lucide:chevrons-up'" class="text-base"></iconify-icon>
-                        </button>
-                      </div>
-                      <div v-if="!isThinkingCollapsed(group.baseId)">
-                        <pre v-if="group.thinking.isAnimating" class="markdown-typing">{{ group.thinking.displayContent }}</pre>
-                        <div v-else class="markdown-body break-words text-[13px]" v-html="renderMarkdown(group.thinking.content, false)"></div>
-                      </div>
+                      <div class="font-bold mb-1 flex items-center gap-2 text-xs"><iconify-icon icon="lucide:brain-circuit"></iconify-icon>推理过程</div>
+                      <pre v-if="group.thinking.isAnimating" class="markdown-typing">{{ group.thinking.displayContent }}</pre>
+                      <div v-else class="markdown-body break-words text-[13px]" v-html="renderMarkdown(group.thinking.content, false)"></div>
                     </div>
                     
-                    <div class="relative">
-                      <button class="absolute right-0 top-0 h-8 w-8 rounded-lg hover:bg-white/10" @click="toggleReplyCollapse(group.baseId)">
-                        <iconify-icon :icon="isReplyCollapsed(group.baseId) ? 'lucide:chevrons-down' : 'lucide:chevrons-up'" class="text-base"></iconify-icon>
-                      </button>
-                      <div v-if="!isReplyCollapsed(group.baseId)" class="pt-1">
-                        <div v-if="group.reply?.isPlaceholder" class="mt-2 inline-flex items-center gap-2 text-xs opacity-70">
-                          <span class="typing-dot"></span>
-                          <span class="typing-dot"></span>
-                          <span class="typing-dot"></span>
-                          <span class="ml-1">{{ group.reply.content }}</span>
-                        </div>
-                        <pre v-else-if="group.reply?.isAnimating" class="markdown-typing">{{ group.reply.displayContent }}</pre>
-                        <div v-else class="markdown-body break-words text-[13px]" v-html="renderMarkdown(group.reply ? group.reply.content : '', false)"></div>
+                    <div>
+                      <div v-if="group.reply?.isPlaceholder" class="mt-2 inline-flex items-center gap-2 text-xs opacity-70">
+                        <span class="typing-dot"></span>
+                        <span class="typing-dot"></span>
+                        <span class="typing-dot"></span>
+                        <span class="ml-1">{{ group.reply.content }}</span>
                       </div>
-                      <div v-else class="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/70">
-                        已收拢回复
-                      </div>
+                      <pre v-else-if="group.reply?.isAnimating" class="markdown-typing">{{ group.reply.displayContent }}</pre>
+                      <div v-else class="markdown-body break-words text-[13px]" v-html="renderMarkdown(group.reply ? group.reply.content : '', false)"></div>
                     </div>
                   </template>
                   <div class="text-xs mt-2 opacity-60">{{ new Date((group.reply || group.thinking).timestamp).toLocaleTimeString() }}</div>
-                  <button class="absolute bottom-3 right-3 h-9 w-9 rounded-full border border-white/10 bg-white/5 text-white/70 hover:bg-white/10" @click="toggleAssistantCollapse(group.baseId)">
-                    <iconify-icon :icon="isAssistantCollapsed(group.baseId) ? 'lucide:chevrons-down' : 'lucide:chevrons-up'" class="text-lg"></iconify-icon>
-                  </button>
                 </div>
               </div>
 
