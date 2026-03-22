@@ -1,3 +1,5 @@
 agent_server
 agent_server.log
 logs/
+server.log
+server
