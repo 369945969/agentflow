@@ -62,6 +62,59 @@ const messageListRef = ref<HTMLElement | null>(null)
 const thinkingViewports = new Map<string, HTMLElement>()
 const thinkingExpanded = ref<Record<string, boolean>>({})
 const shouldStickToBottom = ref(true)
+const pendingUserEcho = new Map<string, string>()
+const seenStreamEventKeys = new Map<string, number>()
+
+const rememberStreamEvent = (key: string) => {
+  const now = Date.now()
+  seenStreamEventKeys.set(key, now)
+
+  if (seenStreamEventKeys.size < 400) return
+  const cutoff = now - 60_000
+  for (const [k, ts] of seenStreamEventKeys) {
+    if (ts < cutoff) seenStreamEventKeys.delete(k)
+    if (seenStreamEventKeys.size < 300) break
+  }
+}
+
+const handleWsConnectionChange = (connected: boolean) => {
+  isConnected.value = connected
+  console.log('[SinglePersonChat] WebSocket connection changed:', connected)
+}
+
+const handleWsMessage = (message: ServerMessage) => {
+  console.log('[SinglePersonChat] Received message:', message)
+  if (message.type === 'stream_chunk' || message.type === 'stream_end') {
+    const payload: any = message.payload
+    const content = typeof payload?.content === 'string' ? payload.content : ''
+    const isThinking = Boolean(payload?.is_thinking)
+    const isFinal = Boolean(payload?.is_final)
+    const eventKey = `${message.type}|${message.message_id || ''}|${isThinking ? 1 : 0}|${isFinal ? 1 : 0}|${content}`
+    if (seenStreamEventKeys.has(eventKey)) {
+      return
+    }
+    rememberStreamEvent(eventKey)
+    upsertAgentMessage(message)
+    return
+  }
+  if (message.type === 'error') {
+    console.error('[SinglePersonChat] WebSocket error payload:', message.payload)
+    const payload = message.payload
+    const errorText = payload?.message || '服务暂时不可用，请稍后重试'
+    messages.value.push({
+      id: `error:${message.message_id || Date.now()}`,
+      type: 'agent',
+      content: `错误：${errorText}`,
+      isThinking: false,
+      isFinal: true,
+      isError: true,
+      timestamp: message.timestamp || Date.now()
+    })
+    if (shouldStickToBottom.value) {
+      scrollMessagesToBottom(true)
+    }
+  }
+}
 
 const trimTrailingBlankLines = (text: string) => text.replace(/\n{3,}$/g, '\n').replace(/\s+$/g, '')
 const trimLeadingBlankLines = (text: string) => text.replace(/^\s*\n+/g, '')
@@ -77,6 +130,26 @@ const stripMemoryLines = (text: string) => {
       return true
     })
     .join('\n')
+}
+
+const stripLeadingUserEcho = (messageId: string | undefined, text: string) => {
+  if (!messageId) return text
+  const userText = pendingUserEcho.get(messageId)
+  if (!userText) return text
+  const needle = userText.trim()
+  if (!needle) {
+    pendingUserEcho.delete(messageId)
+    return text
+  }
+
+  const candidate = trimLeadingBlankLines(text)
+  if (!candidate.startsWith(needle)) return text
+
+  const rest = candidate.slice(needle.length)
+  if (rest !== '' && !/^\s/.test(rest)) return text
+
+  const cleaned = trimLeadingBlankLines(rest)
+  return cleaned
 }
 
 const scrollMessagesToBottom = (smooth = false) => {
@@ -139,12 +212,16 @@ const upsertAgentMessage = (message: ServerMessage) => {
   if (!payload || typeof payload !== 'object') return
 
   const isThinking = Boolean(payload.is_thinking)
+  const messageId = message.message_id || ''
   const streamKey = `${message.message_id || 'unknown'}:${isThinking ? 'thinking' : 'answer'}`
   const existing = messages.value.find((item: any) => item.type === 'agent' && item.streamKey === streamKey)
 
   if (message.type === 'stream_chunk') {
-    const chunk = stripMemoryLines(payload.content || '')
-    if (!chunk) return
+    let chunk = stripMemoryLines(payload.content || '')
+    if (!isThinking) {
+      chunk = stripLeadingUserEcho(messageId, chunk)
+    }
+    if (!chunk && !existing) return
     if (existing) {
       existing.timestamp = message.timestamp || Date.now()
       existing.isFinal = false
@@ -192,6 +269,7 @@ const upsertAgentMessage = (message: ServerMessage) => {
   const finalContent = stripMemoryLines(payload.content || '')
   if (finalExisting) {
     finalExisting.content = trimTrailingBlankLines(trimLeadingBlankLines(stripMemoryLines(finalContent || finalExisting.content || '')))
+    finalExisting.content = stripLeadingUserEcho(messageId, finalExisting.content)
     finalExisting.timestamp = message.timestamp || Date.now()
     finalExisting.isThinking = false
     finalExisting.isFinal = true
@@ -199,6 +277,7 @@ const upsertAgentMessage = (message: ServerMessage) => {
     if (shouldStickToBottom.value) {
       scrollMessagesToBottom(true)
     }
+    if (messageId) pendingUserEcho.delete(messageId)
     return
   }
 
@@ -206,7 +285,7 @@ const upsertAgentMessage = (message: ServerMessage) => {
     id: answerKey,
     streamKey: answerKey,
     type: 'agent',
-    content: trimTrailingBlankLines(trimLeadingBlankLines(stripMemoryLines(finalContent || ''))),
+    content: stripLeadingUserEcho(messageId, trimTrailingBlankLines(trimLeadingBlankLines(stripMemoryLines(finalContent || '')))),
     isThinking: false,
     isFinal: true,
     isStreaming: false,
@@ -215,6 +294,7 @@ const upsertAgentMessage = (message: ServerMessage) => {
   if (shouldStickToBottom.value) {
     scrollMessagesToBottom(true)
   }
+  if (messageId) pendingUserEcho.delete(messageId)
 }
 
 // Update agent settings in database
@@ -260,33 +340,8 @@ const setupWebSocket = () => {
   console.log('[SinglePersonChat] Initializing WebSocket listeners', { url: WEBSOCKET_URL })
   
   // Set up event listeners if not already set up
-  ws.on('connection-change', (connected: boolean) => {
-    isConnected.value = connected
-    console.log('[SinglePersonChat] WebSocket connection changed:', connected)
-  })
-  
-  ws.on('message', (message: ServerMessage) => {
-    console.log('[SinglePersonChat] Received message:', message)
-    if (message.type === 'stream_chunk' || message.type === 'stream_end') {
-      upsertAgentMessage(message)
-    } else if (message.type === 'error') {
-      console.error('[SinglePersonChat] WebSocket error payload:', message.payload)
-      const payload = message.payload
-      const errorText = payload?.message || '服务暂时不可用，请稍后重试'
-      messages.value.push({
-        id: `error:${message.message_id || Date.now()}`,
-        type: 'agent',
-        content: `错误：${errorText}`,
-        isThinking: false,
-        isFinal: true,
-        isError: true,
-        timestamp: message.timestamp || Date.now()
-      })
-      if (shouldStickToBottom.value) {
-        scrollMessagesToBottom(true)
-      }
-    }
-  })
+  ws.on('connection-change', handleWsConnectionChange)
+  ws.on('message', handleWsMessage)
   
   // Connect if not already connected
   if (!ws.getConnectionStatus()) {
@@ -295,18 +350,19 @@ const setupWebSocket = () => {
 }
 
 const sendMessage = () => {
-  if (!inputText.value.trim() || !selectedUserId.value) return
+  const text = inputText.value.trim()
+  if (!text || !selectedUserId.value) return
   console.log('[SinglePersonChat] sendMessage called', {
     selectedUserId: selectedUserId.value,
     isConnected: ws.getConnectionStatus(),
     sessionId: ws.getSessionId(),
-    textLength: inputText.value.trim().length
+    textLength: text.length
   })
   
   const userMessage = {
     id: Date.now().toString(),
     type: 'user',
-    content: inputText.value.trim(),
+    content: text,
     timestamp: Date.now()
   }
   
@@ -315,7 +371,10 @@ const sendMessage = () => {
   scrollMessagesToBottom(true)
   
   // Send via WebSocket
-  const messageId = ws.sendText(inputText.value.trim(), selectedUserId.value)
+  const messageId = ws.sendText(text, selectedUserId.value)
+  if (messageId) {
+    pendingUserEcho.set(messageId, text)
+  }
 
   console.log('[SinglePersonChat] Message dispatched with ID:', messageId)
   inputText.value = ''
@@ -495,6 +554,10 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   thinkingViewports.clear()
+  if (wsInitialized.value) {
+    ws.off('connection-change', handleWsConnectionChange)
+    ws.off('message', handleWsMessage)
+  }
 })
 </script>
 
@@ -648,7 +711,7 @@ onBeforeUnmount(() => {
                   <div class="mb-2 inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-[11px] uppercase tracking-[0.18em] bg-emerald-300/15 text-emerald-200">
                     Reply
                   </div>
-                  <div class="whitespace-pre-wrap">{{ group.reply.content }}</div>
+                  <div class="whitespace-pre-wrap break-words">{{ group.reply.content }}</div>
                   <div
                     v-if="group.reply.isStreaming"
                     class="mt-3 inline-flex items-center gap-2 text-xs opacity-70"
@@ -664,7 +727,7 @@ onBeforeUnmount(() => {
                 v-else-if="group.message.type === 'user'"
                 class="max-w-[760px] rounded-2xl p-4 border bg-[#3B9BFF] text-white border-[#3B9BFF]"
               >
-                <div class="whitespace-pre-wrap">{{ group.message.content }}</div>
+                <div class="whitespace-pre-wrap break-words">{{ group.message.content }}</div>
                 <div class="text-xs mt-2 opacity-60">{{ new Date(group.message.timestamp).toLocaleTimeString() }}</div>
               </div>
 
@@ -675,7 +738,7 @@ onBeforeUnmount(() => {
                 <div class="mb-2 inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-[11px] uppercase tracking-[0.18em] bg-red-400/15 text-red-200">
                   Error
                 </div>
-                <div class="whitespace-pre-wrap">{{ group.message.content }}</div>
+                <div class="whitespace-pre-wrap break-words">{{ group.message.content }}</div>
                 <div class="text-xs mt-2 opacity-60">{{ new Date(group.message.timestamp).toLocaleTimeString() }}</div>
               </div>
             </div>

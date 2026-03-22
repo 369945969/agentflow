@@ -89,6 +89,7 @@ export class AgentWebSocket {
   private connectionId: string | null = null
   private sessionId: string | null = null
   private userId: string | null = null
+  private pendingSendQueue: Message[] = []
 
   constructor(url?: string) {
     this.url = url || WEBSOCKET_URL
@@ -120,6 +121,7 @@ export class AgentWebSocket {
       this.reconnectDelay = 1000
       this.emit('open', event)
       this.emit('connection-change', true)
+      this.flushPendingQueue()
     }
 
     this.ws.onclose = (event) => {
@@ -171,10 +173,12 @@ export class AgentWebSocket {
 
   send(message: Message): void {
     if (!this.isConnected || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      console.error('[AgentWebSocket] Cannot send message: WebSocket not connected', {
+      console.warn('[AgentWebSocket] WebSocket not connected; queueing message and connecting', {
         isConnected: this.isConnected,
         readyState: this.ws?.readyState
       })
+      this.pendingSendQueue.push(message)
+      this.connect()
       return
     }
 
@@ -184,6 +188,15 @@ export class AgentWebSocket {
     } catch (error) {
       console.error('[AgentWebSocket] Failed to send WebSocket message:', error, message)
     }
+  }
+
+  private flushPendingQueue(): void {
+    if (!this.isConnected || !this.ws || this.ws.readyState !== WebSocket.OPEN) return
+    if (this.pendingSendQueue.length === 0) return
+
+    const queue = [...this.pendingSendQueue]
+    this.pendingSendQueue = []
+    queue.forEach(msg => this.send(msg))
   }
 
   sendText(text: string, userId: string, sessionId?: string, metadata?: Partial<MessageMetadata>): string {

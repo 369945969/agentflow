@@ -416,6 +416,8 @@ func (c *Client) readEvents(ctx context.Context, cancel context.CancelFunc, out 
 	reader := bufio.NewReader(resp.Body)
 	assistantMsgID := ""
 	gotText := false
+	seenDeltaText := false
+	seenDeltaReasoning := false
 	currentEventType := ""
 	var dataBuf bytes.Buffer
 
@@ -493,7 +495,7 @@ func (c *Client) readEvents(ctx context.Context, cancel context.CancelFunc, out 
 				if ptype != "text" && ptype != "reasoning" {
 					continue
 				}
-				if assistantMsgID != "" && mid != assistantMsgID {
+				if assistantMsgID != "" && mid != "" && mid != assistantMsgID {
 					continue
 				}
 				var targetBuf *strings.Builder
@@ -506,17 +508,28 @@ func (c *Client) readEvents(ctx context.Context, cancel context.CancelFunc, out 
 				if targetBuf == nil {
 					continue
 				}
-				if delta != "" {
+
+				fullText := text
+				prev := targetBuf.String()
+
+				if (isThinking && seenDeltaReasoning) || (!isThinking && seenDeltaText) {
+					if prev != "" && strings.HasPrefix(fullText, prev) {
+						delta = fullText[len(prev):]
+					} else {
+						delta = ""
+					}
+					targetBuf.Reset()
+					targetBuf.WriteString(fullText)
+				} else if delta != "" {
 					targetBuf.WriteString(delta)
 				} else {
-					prev := targetBuf.String()
-					delta = text
-					if prev != "" && strings.HasPrefix(text, prev) {
-						delta = text[len(prev):]
+					delta = fullText
+					if prev != "" && strings.HasPrefix(fullText, prev) {
+						delta = fullText[len(prev):]
 						targetBuf.Reset()
-						targetBuf.WriteString(text)
+						targetBuf.WriteString(fullText)
 					} else {
-						targetBuf.WriteString(text)
+						targetBuf.WriteString(fullText)
 					}
 				}
 				if delta == "" {
@@ -579,8 +592,10 @@ func (c *Client) readEvents(ctx context.Context, cancel context.CancelFunc, out 
 				isThinking := ptype == "reasoning"
 				if isThinking {
 					targetBuf = reasoningBuf
+					seenDeltaReasoning = true
 				} else {
 					targetBuf = textBuf
+					seenDeltaText = true
 				}
 				if targetBuf == nil {
 					continue
