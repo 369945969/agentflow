@@ -740,9 +740,10 @@ func buildSingleSystemPrompt(base string, enableThinking bool) string {
 	formatHint := strings.Join([]string{
 		"输出格式要求：",
 		"1. 使用标准 Markdown。",
-		"2. 标题独立成行，使用 '# ' / '## ' 等，并在 # 后保留一个空格。同时在这些符号的前面要跟上一个换行\n符号，与上面的消息换行隔开。",
-		"3. 列表每个要点独立成行：无序列表用 '- ' 开头；有序列表用 '1. ' 这种格式，并保留一个空格。同时在这些符号的前面要跟上一个换行\n符号，与上面的消息换行隔开。",
-		"4. 不要把多个要点用 '-' 连接写在同一行；每个要点必须换行写，要带上\n。",
+		"2. 标题独立成行，使用 '# ' / '## ' 等，并在 # 后保留一个空格；标题前必须换行，与上文隔开。",
+		"3. 列表每个要点独立成行：无序列表用 '- ' 开头；有序列表用 '1. ' 这种格式，并保留一个空格；列表前必须换行，与上文隔开。",
+		"4. 不要把多个要点用 '-' 连接写在同一行；每个要点必须换行。",
+		"5. <think> 内的推理过程也必须遵循以上 Markdown 规则（同样要换行、列表独立成行）。",
 	}, "\n")
 	if base == "" {
 		if enableThinking {
@@ -761,7 +762,7 @@ var (
 	reNumberNoSpace   = regexp.MustCompile(`(?m)^(\s*\d+)\.(\S)`)
 	reDashNoSpace     = regexp.MustCompile(`(?m)^(\s*[-*+])(\S)`)
 	reInlineStuckNum  = regexp.MustCompile(`\d+\.[^\s\d]`)
-	reInlineStuckDash = regexp.MustCompile(`[^\n]-[\p{Han}A-Za-z0-9]`)
+	reInlineStuckDash = regexp.MustCompile(`[^\n]-\s*[\p{Han}A-Za-z0-9]`)
 )
 
 func shouldRepairMarkdown(text string) bool {
@@ -776,6 +777,9 @@ func shouldRepairMarkdown(text string) bool {
 		return true
 	}
 	if reInlineStuckNum.MatchString(s) || reInlineStuckDash.MatchString(s) {
+		return true
+	}
+	if strings.Contains(s, " - ") && strings.Contains(s, "：") {
 		return true
 	}
 	return false
@@ -850,6 +854,8 @@ func repairMarkdown(ctx context.Context, client *opencode.Client, execCtx Execut
 		"如果存在标题（例如 '#二、根因分析图'）或代码块围栏（```）紧贴在上一段末尾的情况，需要补齐换行，让它们独立成行。",
 		"如果存在 Mermaid 图：请确保围栏为 ```mermaid 并且 Mermaid 内容从下一行开始。",
 		"如果原文使用了 ```mermaidgraph 或围栏后紧跟 'TD/LR/RL/BT' 这类方向，请修复为标准 Mermaid（例如 'graph TD ...' 或 'flowchart TD ...'）。",
+		"如果存在同一行用 ' - ' 连接多个要点（例如 '人：... - 机：... - 料：...'），请拆分为多行列表，每行一个要点，并使用 '- ' 开头。",
+		"如果存在 '...环境3.' / '...关系4.' 这种编号紧贴在句子后面，请补齐换行，把编号变成新的条目（例如 '3. ...'）。",
 		"要求：不得改写任何词句、不得新增内容、不得删除内容、不得总结。",
 		"只输出修复后的 Markdown 正文，不要输出额外解释。",
 		"禁止输出诸如“修复后的Markdown正文已输出。”之类的提示语。",

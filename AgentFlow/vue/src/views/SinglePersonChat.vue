@@ -27,15 +27,71 @@ let mermaidInitialized = false
 let mermaidTimer: number | null = null
 const mermaidPreviewOpen = ref(false)
 const mermaidPreviewHtml = ref('')
+const mermaidZoom = ref(1)
+const mermaidPreviewBase = ref<{ w: number, h: number } | null>(null)
+const mermaidPreviewRef = ref<HTMLElement | null>(null)
+
+const clampMermaidZoom = (v: number) => Math.min(3, Math.max(0.3, Number.isFinite(v) ? v : 1))
+
+const applyMermaidZoom = () => {
+  const root = mermaidPreviewRef.value
+  if (!root) return
+  const svg = root.querySelector('svg') as SVGSVGElement | null
+  if (!svg) return
+
+  if (!mermaidPreviewBase.value) {
+    svg.style.width = ''
+    svg.style.height = ''
+    svg.style.maxWidth = 'none'
+    const rect = svg.getBoundingClientRect()
+    if (rect.width > 0 && rect.height > 0) {
+      mermaidPreviewBase.value = { w: rect.width, h: rect.height }
+    } else {
+      mermaidPreviewBase.value = { w: 800, h: 600 }
+    }
+  }
+
+  const base = mermaidPreviewBase.value
+  svg.style.maxWidth = 'none'
+  svg.style.width = `${Math.round(base.w * mermaidZoom.value)}px`
+  svg.style.height = `${Math.round(base.h * mermaidZoom.value)}px`
+}
 
 const openMermaidPreview = (html: string) => {
   mermaidPreviewHtml.value = html || ''
+  mermaidZoom.value = 1
+  mermaidPreviewBase.value = null
   mermaidPreviewOpen.value = true
+  nextTick(() => applyMermaidZoom())
 }
 
 const closeMermaidPreview = () => {
   mermaidPreviewOpen.value = false
   mermaidPreviewHtml.value = ''
+  mermaidPreviewBase.value = null
+}
+
+const zoomMermaidIn = () => {
+  mermaidZoom.value = clampMermaidZoom(Number((mermaidZoom.value + 0.1).toFixed(2)))
+  nextTick(() => applyMermaidZoom())
+}
+
+const zoomMermaidOut = () => {
+  mermaidZoom.value = clampMermaidZoom(Number((mermaidZoom.value - 0.1).toFixed(2)))
+  nextTick(() => applyMermaidZoom())
+}
+
+const resetMermaidZoom = () => {
+  mermaidZoom.value = 1
+  nextTick(() => applyMermaidZoom())
+}
+
+const handleMermaidWheel = (e: WheelEvent) => {
+  if (!e.ctrlKey && !e.metaKey) return
+  e.preventDefault()
+  const delta = e.deltaY > 0 ? -0.1 : 0.1
+  mermaidZoom.value = clampMermaidZoom(Number((mermaidZoom.value + delta).toFixed(2)))
+  nextTick(() => applyMermaidZoom())
 }
 
 const scheduleMermaidRender = () => {
@@ -1169,13 +1225,18 @@ onBeforeUnmount(() => {
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6"
       @click="closeMermaidPreview"
     >
-      <div class="relative w-full max-w-6xl max-h-[85vh] overflow-auto rounded-2xl border border-white/10 bg-[#0F1928] p-4" @click.stop>
+      <div ref="mermaidPreviewRef" class="relative w-full max-w-6xl max-h-[85vh] overflow-auto rounded-2xl border border-white/10 bg-[#0F1928] p-4" @click.stop @wheel="handleMermaidWheel">
         <button
           class="absolute right-3 top-3 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/70 hover:bg-white/10"
           @click="closeMermaidPreview"
         >
           <iconify-icon icon="lucide:x" class="text-xl"></iconify-icon>
         </button>
+        <div class="absolute left-3 top-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-white/70">
+          <button class="h-8 w-8 rounded-full hover:bg-white/10" @click="zoomMermaidOut">-</button>
+          <button class="h-8 w-8 rounded-full hover:bg-white/10" @click="zoomMermaidIn">+</button>
+          <button class="h-8 rounded-full px-2 hover:bg-white/10" @click="resetMermaidZoom">{{ Math.round(mermaidZoom * 100) }}%</button>
+        </div>
         <div class="markdown-body">
           <div class="mermaid" v-html="mermaidPreviewHtml"></div>
         </div>
