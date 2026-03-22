@@ -273,6 +273,26 @@ const simplifiedOutput = ref(false)
 const messages = ref<any[]>([])
 const inputText = ref('')
 const isConnected = ref(false)
+const typingQueues = new Map<string, Promise<void>>()
+const collapsedAssistant = ref<Record<string, boolean>>({})
+const collapsedThinking = ref<Record<string, boolean>>({})
+const collapsedReply = ref<Record<string, boolean>>({})
+
+const isAssistantCollapsed = (baseId: string) => Boolean(collapsedAssistant.value[baseId])
+const isThinkingCollapsed = (baseId: string) => Boolean(collapsedThinking.value[baseId])
+const isReplyCollapsed = (baseId: string) => Boolean(collapsedReply.value[baseId])
+
+const toggleAssistantCollapse = (baseId: string) => {
+  collapsedAssistant.value = { ...collapsedAssistant.value, [baseId]: !isAssistantCollapsed(baseId) }
+}
+
+const toggleThinkingCollapse = (baseId: string) => {
+  collapsedThinking.value = { ...collapsedThinking.value, [baseId]: !isThinkingCollapsed(baseId) }
+}
+
+const toggleReplyCollapse = (baseId: string) => {
+  collapsedReply.value = { ...collapsedReply.value, [baseId]: !isReplyCollapsed(baseId) }
+}
 
 const messageGroups = computed(() => {
   const groups: any[] = []
@@ -288,6 +308,7 @@ const messageGroups = computed(() => {
       if (!group) {
         group = {
           id: `assistant:${baseId}`,
+          baseId,
           kind: 'assistant',
           thinking: null,
           reply: null
@@ -458,10 +479,11 @@ const schedulePersist = () => {
           } satisfies StoredMessage
         }
         if (m.type === 'agent') {
+          if (m.isPlaceholder) return null
           return {
             id: String(m.id || ''),
             type: 'agent',
-            content: String(m.content || ''),
+            content: typeof m.finalContent === 'string' ? m.finalContent : String(m.content || ''),
             timestamp: Number(m.timestamp || Date.now()),
             isThinking: Boolean(m.isThinking),
             isFinal: Boolean(m.isFinal),
@@ -494,8 +516,6 @@ const handleWsMessage = (message: ServerMessage) => {
     }
     rememberStreamEvent(eventKey)
     upsertAgentMessage(message)
-    scheduleMermaidRender()
-    schedulePersist()
     return
   }
   if (message.type === 'error') {
@@ -579,88 +599,16 @@ const scrollThinkingViewport = (streamKey: string) => {
   }
 }
 
-const upsertAgentMessage = (message: ServerMessage) => {
-  const payload = message.payload
-  if (!payload || typeof payload !== 'object') return
-
-  const isThinking = Boolean(payload.is_thinking)
-  const streamKey = `${message.message_id || 'unknown'}:${isThinking ? 'thinking' : 'answer'}`
-  const existing = messages.value.find((item: any) => item.type === 'agent' && item.streamKey === streamKey)
-
-  if (message.type === 'stream_chunk') {
-    let chunk = stripMemoryLines(payload.content || '')
-    if (!chunk && !existing) return
-    if (existing) {
-      existing.timestamp = message.timestamp || Date.now()
-      existing.isFinal = false
-      existing.isStreaming = true
-      if (isThinking) {
-        existing.content = trimLeadingBlankLines(stripMemoryLines(existing.content + chunk))
-        scrollThinkingViewport(streamKey)
-      } else {
-        existing.content = trimLeadingBlankLines(stripMemoryLines(existing.content + chunk))
-        if (shouldStickToBottom.value) {
-          scrollMessagesToBottom()
-        }
-      }
-      return
-    }
-
-    const nextMessage = {
-      id: streamKey,
-      streamKey,
-      type: 'agent',
-      content: isThinking ? '' : trimLeadingBlankLines(chunk),
-      isThinking,
-      isFinal: false,
-      isStreaming: true,
-      timestamp: message.timestamp || Date.now()
-    }
-    messages.value.push(nextMessage)
-    if (isThinking) {
-      nextMessage.content = trimLeadingBlankLines(chunk)
-      scrollThinkingViewport(streamKey)
-    } else if (shouldStickToBottom.value) {
-      scrollMessagesToBottom()
-    }
-    return
-  }
-
-  const answerKey = `${message.message_id || 'unknown'}:answer`
-  const thinkingKey = `${message.message_id || 'unknown'}:thinking`
-  const thinkingMessage = messages.value.find((item: any) => item.type === 'agent' && item.streamKey === thinkingKey)
-  const thinkingContent = typeof (payload as any).thinking_content === 'string' ? (payload as any).thinking_content : ''
-  if (thinkingMessage) {
-    thinkingMessage.isStreaming = false
-    if (thinkingContent) {
-      thinkingMessage.content = trimTrailingBlankLines(trimLeadingBlankLines(stripMemoryLines(thinkingContent)))
-      thinkingMessage.isThinking = true
-      thinkingMessage.isFinal = true
-    }
-    scrollThinkingViewport(thinkingKey)
-  } else if (thinkingContent) {
-    messages.value.push({
-      id: thinkingKey,
-      streamKey: thinkingKey,
-      type: 'agent',
-      content: trimTrailingBlankLines(trimLeadingBlankLines(stripMemoryLines(thinkingContent))),
-      isThinking: true,
-      isFinal: true,
-      isStreaming: false,
-      timestamp: message.timestamp || Date.now()
-    })
-  }
-  const finalExisting = messages.value.find((item: any) => item.type === 'agent' && item.streamKey === answerKey)
-  const finalContent = stripMemoryLines(payload.content || '')
-  if (finalExisting) {
-    finalExisting.content = trimTrailingBlankLines(trimLeadingBlankLines(stripMemoryLines(finalContent || finalExisting.content || '')))
-    finalExisting.timestamp = message.timestamp || Date.now()
-    finalExisting.isThinking = false
-    finalExisting.isFinal = true
-    finalExisting.isStreaming = false
-    if (shouldStickToBottom.value) {
-      scrollMessagesToBottom(true)
-    }
+const ensureTypingPlaceholder = (messageId: string) => {
+  const answerKey = `${messageId || 'unknown'}:answer`
+  const existing = messages.value.find((item: any) => item.type === 'agent' && item.streamKey === answerKey)
+  const label = thinkingEnabled.value ? '正在推理中...' : '正在输入中...'
+  if (existing) {
+    existing.timestamp = Date.now()
+    existing.isStreaming = true
+    existing.isFinal = false
+    existing.isPlaceholder = true
+    existing.content = label
     return
   }
 
@@ -668,15 +616,140 @@ const upsertAgentMessage = (message: ServerMessage) => {
     id: answerKey,
     streamKey: answerKey,
     type: 'agent',
-    content: trimTrailingBlankLines(trimLeadingBlankLines(stripMemoryLines(finalContent || ''))),
+    content: label,
     isThinking: false,
-    isFinal: true,
-    isStreaming: false,
-    timestamp: message.timestamp || Date.now()
+    isFinal: false,
+    isStreaming: true,
+    isPlaceholder: true,
+    timestamp: Date.now()
   })
   if (shouldStickToBottom.value) {
-    scrollMessagesToBottom(true)
+    scrollMessagesToBottom()
   }
+}
+
+const typeOut = (messageObj: any, finalText: string) => {
+  const text = String(finalText || '')
+  messageObj.isPlaceholder = false
+  messageObj.isStreaming = false
+  messageObj.isFinal = true
+  messageObj.isAnimating = true
+  messageObj.displayContent = ''
+  messageObj.finalContent = text
+  messageObj.content = ''
+
+  const total = text.length
+  if (total === 0) {
+    messageObj.isAnimating = false
+    messageObj.content = ''
+    return Promise.resolve()
+  }
+
+  const durationMs = Math.min(1800, Math.max(450, total * 2))
+  const start = performance.now()
+
+  return new Promise<void>((resolve) => {
+    const step = (now: number) => {
+      const t = Math.min(1, (now - start) / durationMs)
+      const count = Math.min(total, Math.max(0, Math.floor(total * t)))
+      messageObj.displayContent = text.slice(0, count)
+      messageObj.timestamp = Date.now()
+      if (shouldStickToBottom.value) {
+        scrollMessagesToBottom()
+      }
+      if (t >= 1) {
+        messageObj.isAnimating = false
+        messageObj.content = text
+        delete messageObj.displayContent
+        scheduleMermaidRender()
+        schedulePersist()
+        resolve()
+        return
+      }
+      requestAnimationFrame(step)
+    }
+    requestAnimationFrame(step)
+  })
+}
+
+const upsertAgentMessage = (message: ServerMessage) => {
+  const payload = message.payload
+  if (!payload || typeof payload !== 'object') return
+
+  const isThinking = Boolean(payload.is_thinking)
+
+  if (message.type === 'stream_chunk') {
+    if (isThinking) return
+    ensureTypingPlaceholder(message.message_id || 'unknown')
+    return
+  }
+
+  const answerKey = `${message.message_id || 'unknown'}:answer`
+  const thinkingKey = `${message.message_id || 'unknown'}:thinking`
+  const baseId = (message.message_id || 'unknown').toString()
+
+  const finalize = async () => {
+    const thinkingContent = typeof (payload as any).thinking_content === 'string' ? (payload as any).thinking_content : ''
+    const finalContent = typeof (payload as any).content === 'string' ? (payload as any).content : ''
+
+    const placeholder = messages.value.find((item: any) => item.type === 'agent' && item.streamKey === answerKey && item.isPlaceholder)
+    if (placeholder) {
+      messages.value = messages.value.filter((m: any) => !(m.type === 'agent' && m.streamKey === answerKey && m.isPlaceholder))
+    }
+
+    let thinkingMessage = messages.value.find((item: any) => item.type === 'agent' && item.streamKey === thinkingKey)
+    if (thinkingContent) {
+      if (!thinkingMessage) {
+        thinkingMessage = {
+          id: thinkingKey,
+          streamKey: thinkingKey,
+          type: 'agent',
+          content: '',
+          isThinking: true,
+          isFinal: true,
+          isStreaming: false,
+          timestamp: message.timestamp || Date.now()
+        }
+        messages.value.push(thinkingMessage)
+      }
+      thinkingMessage.isThinking = true
+      thinkingMessage.isFinal = true
+      thinkingMessage.isStreaming = false
+    }
+
+    let answerMessage = messages.value.find((item: any) => item.type === 'agent' && item.streamKey === answerKey && !item.isError)
+    if (!answerMessage) {
+      answerMessage = {
+        id: answerKey,
+        streamKey: answerKey,
+        type: 'agent',
+        content: '',
+        isThinking: false,
+        isFinal: true,
+        isStreaming: false,
+        timestamp: message.timestamp || Date.now()
+      }
+      messages.value.push(answerMessage)
+    }
+
+    if (shouldStickToBottom.value) {
+      scrollMessagesToBottom(true)
+    }
+
+    const cleanThinking = trimTrailingBlankLines(trimLeadingBlankLines(stripMemoryLines(thinkingContent || '')))
+    const cleanAnswer = trimTrailingBlankLines(trimLeadingBlankLines(stripMemoryLines(finalContent || '')))
+
+    if (thinkingMessage && thinkingContent) {
+      await typeOut(thinkingMessage, cleanThinking)
+      scrollThinkingViewport(thinkingKey)
+    }
+    await typeOut(answerMessage, cleanAnswer)
+  }
+
+  const chain = (typingQueues.get(baseId) || Promise.resolve()).then(finalize).finally(() => {
+    if (typingQueues.get(baseId) === chain) typingQueues.delete(baseId)
+  })
+  typingQueues.set(baseId, chain)
 }
 
 // Update agent settings in database
@@ -770,6 +843,9 @@ const sendMessage = () => {
   
   // Send via WebSocket
   const messageId = ws.sendText(text, userId, sessionId)
+  if (messageId) {
+    ensureTypingPlaceholder(messageId)
+  }
   console.log('[SinglePersonChat] Message dispatched with ID:', messageId)
   inputText.value = ''
   schedulePersist()
@@ -1108,7 +1184,7 @@ onBeforeUnmount(() => {
             >
                 <div v-if="group.kind === 'assistant'" class="w-full max-w-[760px] space-y-3 text-[13px]">
                 <!-- Original Message Container -->
-                <div class="max-w-[760px] rounded-2xl p-4 border bg-white/10 text-white/90 border-white/10">
+                <div class="relative max-w-[760px] rounded-2xl p-4 border bg-white/10 text-white/90 border-white/10">
                   <div class="mb-3 flex items-center gap-2">
                     <div class="w-8 h-8 rounded-lg bg-[#3B9BFF]/20 flex items-center justify-center text-[#3B9BFF] font-bold text-xs">
                       {{ selectedUser ? selectedUser.name.charAt(0) : 'AI' }}
@@ -1119,18 +1195,51 @@ onBeforeUnmount(() => {
                   </div>
                   
                   <!-- Merged Thinking and Reply -->
-                  <div v-if="group.thinking && hasMeaningfulThinking(group.thinking)" class="mb-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-100/70">
-                    <div class="font-bold mb-1 flex items-center gap-2 text-xs"><iconify-icon icon="lucide:brain-circuit"></iconify-icon>推理过程</div>
-                    <div class="markdown-body break-words text-[13px]" v-html="renderMarkdown(group.thinking.content, Boolean(group.thinking.isStreaming))"></div>
+                  <div v-if="isAssistantCollapsed(group.baseId)" class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/70">
+                    <div class="flex items-center justify-between">
+                      <span>已收拢</span>
+                      <button class="h-8 w-8 rounded-lg hover:bg-white/10" @click="toggleAssistantCollapse(group.baseId)">
+                        <iconify-icon icon="lucide:chevrons-down" class="text-base"></iconify-icon>
+                      </button>
+                    </div>
                   </div>
-                  
-                  <div class="markdown-body break-words text-[13px]" v-html="renderMarkdown(group.reply ? group.reply.content : '', Boolean(group.reply?.isStreaming))"></div>
-                  
-                  <div v-if="group.reply?.isStreaming" class="mt-3 inline-flex items-center gap-2 text-xs opacity-70">
-                    <span class="h-2 w-2 rounded-full bg-current animate-pulse"></span>
-                    <span>生成中...</span>
-                  </div>
+                  <template v-else>
+                    <div v-if="group.thinking && (group.thinking.isAnimating || hasMeaningfulThinking(group.thinking))" class="mb-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-100/70">
+                      <div class="flex items-center justify-between gap-2">
+                        <div class="font-bold mb-1 flex items-center gap-2 text-xs"><iconify-icon icon="lucide:brain-circuit"></iconify-icon>推理过程</div>
+                        <button class="h-8 w-8 rounded-lg hover:bg-white/10" @click="toggleThinkingCollapse(group.baseId)">
+                          <iconify-icon :icon="isThinkingCollapsed(group.baseId) ? 'lucide:chevrons-down' : 'lucide:chevrons-up'" class="text-base"></iconify-icon>
+                        </button>
+                      </div>
+                      <div v-if="!isThinkingCollapsed(group.baseId)">
+                        <pre v-if="group.thinking.isAnimating" class="markdown-typing">{{ group.thinking.displayContent }}</pre>
+                        <div v-else class="markdown-body break-words text-[13px]" v-html="renderMarkdown(group.thinking.content, false)"></div>
+                      </div>
+                    </div>
+                    
+                    <div class="relative">
+                      <button class="absolute right-0 top-0 h-8 w-8 rounded-lg hover:bg-white/10" @click="toggleReplyCollapse(group.baseId)">
+                        <iconify-icon :icon="isReplyCollapsed(group.baseId) ? 'lucide:chevrons-down' : 'lucide:chevrons-up'" class="text-base"></iconify-icon>
+                      </button>
+                      <div v-if="!isReplyCollapsed(group.baseId)" class="pt-1">
+                        <div v-if="group.reply?.isPlaceholder" class="mt-2 inline-flex items-center gap-2 text-xs opacity-70">
+                          <span class="typing-dot"></span>
+                          <span class="typing-dot"></span>
+                          <span class="typing-dot"></span>
+                          <span class="ml-1">{{ group.reply.content }}</span>
+                        </div>
+                        <pre v-else-if="group.reply?.isAnimating" class="markdown-typing">{{ group.reply.displayContent }}</pre>
+                        <div v-else class="markdown-body break-words text-[13px]" v-html="renderMarkdown(group.reply ? group.reply.content : '', false)"></div>
+                      </div>
+                      <div v-else class="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/70">
+                        已收拢回复
+                      </div>
+                    </div>
+                  </template>
                   <div class="text-xs mt-2 opacity-60">{{ new Date((group.reply || group.thinking).timestamp).toLocaleTimeString() }}</div>
+                  <button class="absolute bottom-3 right-3 h-9 w-9 rounded-full border border-white/10 bg-white/5 text-white/70 hover:bg-white/10" @click="toggleAssistantCollapse(group.baseId)">
+                    <iconify-icon :icon="isAssistantCollapsed(group.baseId) ? 'lucide:chevrons-down' : 'lucide:chevrons-up'" class="text-lg"></iconify-icon>
+                  </button>
                 </div>
               </div>
 
@@ -1393,6 +1502,34 @@ onBeforeUnmount(() => {
   padding: 0;
   background: transparent;
   font-size: 0.9em;
+}
+
+.markdown-typing {
+  margin: 0.25em 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.92em;
+  line-height: 1.7;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.typing-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.6);
+  display: inline-block;
+  animation: typingBounce 1s infinite ease-in-out;
+}
+
+.typing-dot:nth-child(1) { animation-delay: 0ms; }
+.typing-dot:nth-child(2) { animation-delay: 120ms; }
+.typing-dot:nth-child(3) { animation-delay: 240ms; }
+
+@keyframes typingBounce {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+  40% { transform: translateY(-3px); opacity: 1; }
 }
 
 :deep(.markdown-body a) {
