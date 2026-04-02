@@ -37,10 +37,12 @@ type RoleIdentity struct {
 }
 
 type GroupInfo struct {
-	GroupID   string
-	GroupName string
-	Members   []GroupMember
-	CreatorID string
+	GroupID       string
+	GroupName     string
+	Members       []GroupMember
+	CreatorID     string
+	GroupRuleMode string // "free", "expert", "custom"
+	CustomRule    string
 }
 
 type GroupMember struct {

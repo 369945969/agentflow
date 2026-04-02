@@ -87,7 +87,7 @@ func main() {
 	})
 	core.SetLogBasePath(cfg.Log.Dir)
 
-	gateway := ws.NewGateway(upgrader, func(ctx context.Context, connID string, msg protocol.Message) {
+	gateway := ws.NewGateway(upgrader, core, func(ctx context.Context, connID string, msg protocol.Message) {
 		core.HandleMessage(ctx, connID, msg)
 	},
 		ws.WithHeartbeat(time.Duration(cfg.WebSocket.PingIntervalSec)*time.Second, time.Duration(cfg.WebSocket.PongWaitSec)*time.Second),

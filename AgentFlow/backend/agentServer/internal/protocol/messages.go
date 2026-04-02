@@ -9,6 +9,12 @@ type Message struct {
 	Content   MessageContent  `json:"content"`
 	Metadata  MessageMetadata `json:"metadata"`
 	Timestamp int64           `json:"timestamp"`
+
+	// User-specific settings loaded from database
+	ThinkingEnabled  bool   `json:"thinking_enabled,omitempty"`
+	SimplifiedOutput bool   `json:"simplified_output,omitempty"`
+	SystemPrompt     string `json:"system_prompt,omitempty"`
+	BoundModel       string `json:"bound_model,omitempty"`
 }
 
 type MessageContent struct {
@@ -53,20 +59,22 @@ type ServerMessage struct {
 }
 
 type StreamChunkPayload struct {
-	Content    string                 `json:"content"`
-	IsThinking bool                   `json:"is_thinking"`
-	IsFinal    bool                   `json:"is_final"`
-	AssistantMessageID string         `json:"assistant_message_id,omitempty"`
-	Progress   int                    `json:"progress,omitempty"`
-	Metadata   map[string]interface{} `json:"metadata,omitempty"`
+	Content            string                 `json:"content"`
+	IsThinking         bool                   `json:"is_thinking"`
+	IsFinal            bool                   `json:"is_final"`
+	SenderID           string                 `json:"sender_id,omitempty"`
+	AssistantMessageID string                 `json:"assistant_message_id,omitempty"`
+	Progress           int                    `json:"progress,omitempty"`
+	Metadata           map[string]interface{} `json:"metadata,omitempty"`
 }
 
 type StreamEndPayload struct {
-	Content string         `json:"content"`
-	ThinkingContent string `json:"thinking_content,omitempty"`
-	IsFinal bool           `json:"is_final"`
-	AssistantMessageID string `json:"assistant_message_id,omitempty"`
-	Usage   map[string]int `json:"usage,omitempty"`
+	Content            string         `json:"content"`
+	ThinkingContent    string         `json:"thinking_content,omitempty"`
+	IsFinal            bool           `json:"is_final"`
+	SenderID           string         `json:"sender_id,omitempty"`
+	AssistantMessageID string         `json:"assistant_message_id,omitempty"`
+	Usage              map[string]int `json:"usage,omitempty"`
 }
 
 type ErrorPayload struct {

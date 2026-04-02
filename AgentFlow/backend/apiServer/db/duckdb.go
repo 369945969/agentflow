@@ -42,16 +42,12 @@ func InitDB() {
 		`CREATE TABLE IF NOT EXISTS agent_skills (agent_id VARCHAR NOT NULL, skill_id VARCHAR NOT NULL, PRIMARY KEY (agent_id, skill_id));`,
 		`CREATE TABLE IF NOT EXISTS workflows (id VARCHAR PRIMARY KEY, name VARCHAR, description TEXT, graph JSON, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);`,
 	}
-
 	for _, q := range queries {
 		_, err := DB.Exec(q)
 		if err != nil {
 			log.Fatalf("Failed to initialize database table: %v", err)
 		}
 	}
-
-	// Ensure 'default' group exists
-	_, _ = DB.Exec("INSERT OR IGNORE INTO groups (id, name) VALUES ('default', '所有人 (Default Group)')")
 
 	fmt.Println("✅ DuckDB Initialized")
 }

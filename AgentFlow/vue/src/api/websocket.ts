@@ -38,6 +38,7 @@ export interface MessageMetadata {
 export interface Message {
   message_id: string
   session_id: string
+  group_id?: string
   user_id: string
   type: string
   content: MessageContent
@@ -205,6 +206,28 @@ export class AgentWebSocket {
     const message: Message = {
       message_id: messageId,
       session_id: sessionId || this.sessionId || this.generateMessageId(),
+      user_id: resolvedUserId,
+      type: 'user_message',
+      content: {
+        text,
+        attachments: [],
+        mentions: []
+      },
+      metadata: metadata || {},
+      timestamp: Date.now()
+    }
+    
+    this.send(message)
+    return messageId
+  }
+
+  sendGroupText(text: string, userId: string, groupId: string, sessionId?: string, metadata?: Partial<MessageMetadata>): string {
+    const messageId = this.generateMessageId()
+    const resolvedUserId = userId || this.userId || ''
+    const message: Message = {
+      message_id: messageId,
+      session_id: sessionId || this.sessionId || this.generateMessageId(),
+      group_id: groupId,
       user_id: resolvedUserId,
       type: 'user_message',
       content: {

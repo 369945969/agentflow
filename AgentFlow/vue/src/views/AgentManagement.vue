@@ -67,7 +67,10 @@ onMounted(() => {
 
 // Create/Edit state
 const isCreateModalOpen = ref(false)
+const isAICreateModalOpen = ref(false)
 const isEditing = ref(false)
+const isAIGenerating = ref(false)
+const aiPrompt = ref('')
 const currentEmployee = ref<any>({
   name: '',
   description: '',
@@ -75,6 +78,44 @@ const currentEmployee = ref<any>({
   system_prompt: '',
   skills: []
 })
+
+const openAICreateModal = () => {
+  aiPrompt.value = ''
+  isAICreateModalOpen.value = true
+}
+
+const handleAICreate = async () => {
+  if (!aiPrompt.value.trim()) return
+  isAIGenerating.value = true
+  
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/agents/ai-generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: aiPrompt.value })
+    })
+    
+    if (response.ok) {
+      const suggestedConfig = await response.json()
+      currentEmployee.value = {
+        name: suggestedConfig.name || '',
+        description: suggestedConfig.description || '',
+        model: currentEmployee.value.model,
+        system_prompt: suggestedConfig.system_prompt || '',
+        skills: suggestedConfig.skills || []
+      }
+      isAICreateModalOpen.value = false
+      isCreateModalOpen.value = true
+    } else {
+      alert('AI 解析失败，请重试')
+    }
+  } catch (error) {
+    console.error('AI generate error:', error)
+    alert('请求失败')
+  } finally {
+    isAIGenerating.value = false
+  }
+}
 
 const normalizeSkills = (skills: unknown): string[] => {
   if (Array.isArray(skills)) {
@@ -176,7 +217,7 @@ const handleUpdate = async () => {
 }
 
 const handleDelete = async (id: string) => {
-  if (!confirm('确定要删除这个数字员工吗?')) return
+  if (!confirm('确定要删除这个AI智能体吗?')) return
   try {
     const response = await fetch(`${API_BASE_URL}/api/agents/${id}`, {
       method: 'DELETE'
@@ -216,8 +257,8 @@ const toggleSkill = (skillId: string) => {
       <!-- Header Area -->
       <div class="flex justify-between items-center shrink-0">
         <div>
-          <h1 class="text-3xl font-bold text-white mb-2">数字员工管理</h1>
-          <p class="text-white/50 text-sm">创建和管理您的企业数字员工，为其分配模型和专业技能。</p>
+          <h1 class="text-3xl font-bold text-white mb-2">AI智能体管理</h1>
+          <p class="text-white/50 text-sm">创建和管理您的企业AI智能体，为其分配模型和专业技能。</p>
         </div>
         <div class="flex gap-4">
           <div class="flex bg-white/5 rounded-xl p-1 border border-white/10 h-fit">
@@ -228,9 +269,13 @@ const toggleSkill = (skillId: string) => {
               <iconify-icon icon="lucide:list"></iconify-icon>
             </button>
           </div>
+          <button @click="openAICreateModal" class="px-6 py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl font-bold border border-white/10 transition-all flex items-center gap-2 h-fit group">
+            <iconify-icon icon="lucide:sparkles" class="text-[#3B9BFF] group-hover:animate-pulse"></iconify-icon>
+            AI 创建智能体
+          </button>
           <button @click="openCreateModal" class="px-6 py-3 bg-[#3B9BFF] hover:bg-[#2A7FDB] text-white rounded-xl font-bold shadow-[0_0_20px_rgba(59,155,255,0.4)] transition-all flex items-center gap-2 h-fit">
             <iconify-icon icon="lucide:plus"></iconify-icon>
-            创建数字员工
+            创建智能体
           </button>
         </div>
       </div>
@@ -239,7 +284,7 @@ const toggleSkill = (skillId: string) => {
       <div style="background-color: color-mix( in oklab , #fff 5% , transparent ); backdrop-filter: blur(24px); border-color: color-mix( in oklab , #3B9BFF 30% , transparent );" class="p-6 border-[1px] border-solid rounded-2xl shrink-0">
         <div class="bg-white/5 border border-white/10 rounded-xl px-4 py-3 flex items-center gap-3 backdrop-blur-md w-full">
           <iconify-icon icon="lucide:search" class="text-white/40"></iconify-icon>
-          <input v-model="searchQuery" type="text" placeholder="按名称/描述搜索数字员工..." class="bg-transparent border-none outline-none text-sm text-white/70 w-full">
+          <input v-model="searchQuery" type="text" placeholder="按名称/描述搜索AI智能体..." class="bg-transparent border-none outline-none text-sm text-white/70 w-full">
         </div>
       </div>
 
@@ -289,8 +334,8 @@ const toggleSkill = (skillId: string) => {
           <div class="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mb-6">
             <iconify-icon icon="lucide:user-x" class="text-5xl"></iconify-icon>
           </div>
-          <p class="text-xl font-medium mb-2">暂无数字员工</p>
-          <p class="text-sm mb-8 text-white/10">点击上方按钮开始创建您的第一位数字员工</p>
+          <p class="text-xl font-medium mb-2">暂无AI智能体</p>
+          <p class="text-sm mb-8 text-white/10">点击上方按钮开始创建您的第一位AI智能体</p>
           <button @click="openCreateModal" class="px-6 py-2 border border-white/10 rounded-xl hover:bg-white/5 transition-all text-white/60">立即创建</button>
         </div>
       </div>
@@ -308,7 +353,7 @@ const toggleSkill = (skillId: string) => {
           <div @click="closeCreateModal" class="absolute inset-0 bg-black/60 backdrop-blur-md"></div>
           <div class="relative w-full max-w-4xl max-h-[90vh] bg-[#1A2536] border border-white/10 rounded-3xl shadow-2xl overflow-hidden flex flex-col">
             <div class="p-6 border-b border-white/10 flex justify-between items-center bg-white/5">
-              <h2 class="text-xl font-bold text-white/95">{{ isEditing ? "编辑数字员工" : "创建数字员工" }}</h2>
+              <h2 class="text-xl font-bold text-white/95">{{ isEditing ? "编辑AI智能体" : "创建AI智能体" }}</h2>
               <button @click="closeCreateModal" class="w-8 h-8 rounded-full flex items-center justify-center hover:bg-white/10 text-white/40"><iconify-icon icon="lucide:x" class="text-xl"></iconify-icon></button>
             </div>
 
@@ -323,7 +368,7 @@ const toggleSkill = (skillId: string) => {
 
                   <div class="space-y-4">
                     <label class="text-xs text-white/40 block font-bold uppercase tracking-widest">职责描述</label>
-                    <textarea v-model="currentEmployee.description" placeholder="描述该数字员工的主要职责..." rows="3" class="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-[#3B9BFF]/50 transition-all resize-none"></textarea>
+                    <textarea v-model="currentEmployee.description" placeholder="描述该AI智能体的主要职责..." rows="3" class="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-[#3B9BFF]/50 transition-all resize-none"></textarea>
                   </div>
 
                   <div class="space-y-4">
@@ -385,13 +430,72 @@ const toggleSkill = (skillId: string) => {
               <!-- System Prompt -->
               <div class="space-y-4 pt-4 border-t border-white/5">
                 <label class="text-xs text-white/40 block font-bold uppercase tracking-widest">系统提示词 (System Prompt)</label>
-                <textarea v-model="currentEmployee.system_prompt" placeholder="设置该数字员工的行为指令，例如：你是一个资深的 Java 开发工程师..." rows="5" class="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white/80 outline-none focus:border-[#3B9BFF]/50 transition-all font-mono"></textarea>
+                <textarea v-model="currentEmployee.system_prompt" placeholder="设置该AI智能体的行为指令，例如：你是一个资深的 Java 开发工程师..." rows="5" class="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white/80 outline-none focus:border-[#3B9BFF]/50 transition-all font-mono"></textarea>
               </div>
             </div>
 
             <div class="p-6 border-t border-white/10 bg-white/5 flex gap-4">
               <button @click="closeCreateModal" class="flex-1 py-3 rounded-xl border border-white/10 text-white/60 hover:bg-white/5 transition-all text-sm">取消</button>
               <button @click="handleSave" class="flex-1 py-3 rounded-xl bg-[#3B9BFF] text-white font-bold shadow-[0_0_20px_rgba(59,155,255,0.4)] hover:bg-[#2A7FDB] transition-all text-sm">{{ isEditing ? "保存变更" : "确认创建" }}</button>
+            </div>
+          </div>
+        </div>
+      </Transition>
+
+      <!-- AI Create Agent Modal (Manus Style) -->
+      <Transition
+        enter-active-class="transition duration-300 ease-out"
+        enter-from-class="opacity-0 scale-105"
+        enter-to-class="opacity-100 scale-100"
+        leave-active-class="transition duration-200 ease-in"
+        leave-from-class="opacity-100 scale-100"
+        leave-to-class="opacity-0 scale-105"
+      >
+        <div v-if="isAICreateModalOpen" class="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-[#0F1928]/90 backdrop-blur-2xl">
+          <div class="absolute top-8 right-8">
+            <button @click="isAICreateModalOpen = false" class="w-12 h-12 rounded-full flex items-center justify-center bg-white/5 hover:bg-white/10 text-white/40 hover:text-white transition-all">
+              <iconify-icon icon="lucide:x" class="text-2xl"></iconify-icon>
+            </button>
+          </div>
+
+          <div class="w-full max-w-2xl flex flex-col items-center">
+            <div class="flex items-center gap-4 mb-8">
+              <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-[#3B9BFF] to-[#50C878] flex items-center justify-center text-white shadow-lg">
+                <iconify-icon icon="lucide:sparkles" class="text-2xl"></iconify-icon>
+              </div>
+              <h2 class="text-3xl font-bold text-white tracking-tight">AI 智能创建</h2>
+            </div>
+
+            <p class="text-white/40 text-center mb-10 max-w-md">只需描述你想要什么样的 AI 智能体，系统将自动为你生成最佳配置、职责和提示词。</p>
+
+            <div class="w-full bg-white/5 border border-white/10 rounded-[32px] p-2 shadow-2xl focus-within:border-[#3B9BFF]/50 transition-all">
+              <textarea
+                v-model="aiPrompt"
+                placeholder="例如：我想要一个专门分析财务报表的专家，能够识别风险并提供优化建议..."
+                class="w-full bg-transparent border-none outline-none text-lg text-white/90 p-6 min-h-[180px] resize-none placeholder:text-white/10"
+              ></textarea>
+              
+              <div class="flex items-center justify-between p-4 bg-white/5 rounded-[24px]">
+                <div class="flex items-center gap-2 pl-2">
+                  <iconify-icon icon="lucide:info" class="text-white/20 text-xs"></iconify-icon>
+                  <span class="text-[10px] text-white/20 uppercase tracking-[0.1em] font-bold">Powered by UNIIOC</span>
+                </div>
+
+                <button 
+                  @click="handleAICreate"
+                  :disabled="!aiPrompt.trim() || isAIGenerating"
+                  class="h-12 px-8 bg-[#3B9BFF] hover:bg-[#2A7FDB] disabled:opacity-30 disabled:cursor-not-allowed text-white rounded-2xl font-bold shadow-lg transition-all flex items-center gap-2"
+                >
+                  <template v-if="isAIGenerating">
+                    <iconify-icon icon="lucide:loader-2" class="animate-spin text-lg"></iconify-icon>
+                    <span class="text-sm">正在分析中...</span>
+                  </template>
+                  <template v-else>
+                    <span class="text-sm">立即生成</span>
+                    <iconify-icon icon="lucide:arrow-right" class="text-lg"></iconify-icon>
+                  </template>
+                </button>
+              </div>
             </div>
           </div>
         </div>

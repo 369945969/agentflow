@@ -70,7 +70,6 @@ func createGroup(c *gin.Context) {
 		return
 	}
 
-	newGroup.Members = input.Members
 	c.JSON(http.StatusCreated, newGroup)
 }
 
@@ -89,7 +88,8 @@ func getGroups(c *gin.Context) {
 		FROM groups g 
 		LEFT JOIN group_members gm ON g.id = gm.group_id 
 		LEFT JOIN agents a ON gm.user_id = a.id 
-		ORDER BY g.id = 'default' DESC, g.created_at DESC
+		WHERE g.id != 'default'
+		ORDER BY g.created_at DESC
 	`)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch groups"})
@@ -99,9 +99,11 @@ func getGroups(c *gin.Context) {
 
 	groupsMap := make(map[string]map[string]interface{})
 	for rows.Next() {
-		var groupID, groupName, createdAt, groupRuleMode, customRule string
-		var thinkingEnabled, simplifiedOutput bool
+		var groupID, groupName, createdAt string
+		var groupRuleMode, customRule sql.NullString
+		var thinkingEnabled, simplifiedOutput sql.NullBool
 		var memberID, agentName sql.NullString
+		
 		if err := rows.Scan(&groupID, &groupName, &createdAt, &groupRuleMode, &thinkingEnabled, &simplifiedOutput, &customRule, &memberID, &agentName); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to scan group"})
 			return
@@ -114,10 +116,10 @@ func getGroups(c *gin.Context) {
 				"name":              groupName,
 				"lastMsg":           "欢迎加入群聊",
 				"created_at":        createdAt,
-				"group_rule_mode":   groupRuleMode,
-				"thinking_enabled":  thinkingEnabled,
-				"simplified_output": simplifiedOutput,
-				"custom_rule":       customRule,
+				"group_rule_mode":   groupRuleMode.String,
+				"thinking_enabled":  thinkingEnabled.Bool,
+				"simplified_output": simplifiedOutput.Bool,
+				"custom_rule":       customRule.String,
 				"members":           []map[string]string{},
 			}
 		}
@@ -127,7 +129,6 @@ func getGroups(c *gin.Context) {
 				"id":   memberID.String,
 				"name": agentName.String,
 			}
-			// 如果agent_name为空，使用memberID作为后备
 			if agentName.String == "" {
 				member["name"] = memberID.String
 			}
@@ -136,13 +137,6 @@ func getGroups(c *gin.Context) {
 		groupsMap[groupID] = group
 	}
 
-	// 处理查询错误
-	if err := rows.Err(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error while iterating rows"})
-		return
-	}
-
-	// 转换为列表
 	groupsList := make([]map[string]interface{}, 0)
 	for _, group := range groupsMap {
 		groupsList = append(groupsList, group)
@@ -153,23 +147,12 @@ func getGroups(c *gin.Context) {
 
 func updateGroupSettings(c *gin.Context) {
 	id := c.Param("id")
-
-	// Prevent updating default group settings? Allow updates.
-
 	var input UpdateGroupSettingsInput
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Validate group_rule_mode
-	validModes := map[string]bool{"free": true, "expert": true, "custom": true}
-	if !validModes[input.GroupRuleMode] {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid group_rule_mode, must be 'free', 'expert', or 'custom'"})
-		return
-	}
-
-	// Update the group settings
 	_, err := db.DB.Exec(`
 		UPDATE groups 
 		SET group_rule_mode = ?, 
@@ -193,21 +176,12 @@ func updateGroupSettings(c *gin.Context) {
 
 func deleteGroup(c *gin.Context) {
 	id := c.Param("id")
-
-	// Prevent deletion of default group
-	if id == "default" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Cannot delete default group"})
-		return
-	}
-
-	// Start transaction
 	tx, err := db.DB.Begin()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to start transaction"})
 		return
 	}
 
-	// Delete group members first
 	_, err = tx.Exec("DELETE FROM group_members WHERE group_id = ?", id)
 	if err != nil {
 		tx.Rollback()
@@ -215,7 +189,6 @@ func deleteGroup(c *gin.Context) {
 		return
 	}
 
-	// Delete the group
 	_, err = tx.Exec("DELETE FROM groups WHERE id = ?", id)
 	if err != nil {
 		tx.Rollback()

@@ -13,6 +13,8 @@ import (
 
 	"github.com/gorilla/websocket"
 
+	"agentServer/internal/agentcore"
+	"agentServer/internal/database"
 	"agentServer/internal/protocol"
 )
 
@@ -21,6 +23,7 @@ type MessageHandler func(ctx context.Context, connID string, msg protocol.Messag
 type Gateway struct {
 	upgrader websocket.Upgrader
 	handler  MessageHandler
+	core     *agentcore.AgentCore // Reference to AgentCore for services
 
 	mu          sync.RWMutex
 	conns       map[string]*Conn
@@ -55,9 +58,10 @@ func WithSendQueueSize(size int) Option {
 	}
 }
 
-func NewGateway(upgrader websocket.Upgrader, handler MessageHandler, opts ...Option) *Gateway {
+func NewGateway(upgrader websocket.Upgrader, core *agentcore.AgentCore, handler MessageHandler, opts ...Option) *Gateway {
 	g := &Gateway{
 		upgrader:      upgrader,
+		core:          core,
 		handler:       handler,
 		conns:         make(map[string]*Conn),
 		sessions:      make(map[string]map[string]struct{}),
@@ -89,6 +93,7 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	conn := newConn(
 		connID,
 		wsConn,
+		g,
 		g.sendQueueSize,
 		ctx.Done(),
 		cancel,
@@ -157,6 +162,7 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 type Conn struct {
 	ID        string
 	UserID    string
+	gateway   *Gateway
 	wsConn    *websocket.Conn
 	sendCh    chan protocol.ServerMessage
 	pingCh    chan struct{}
@@ -173,6 +179,7 @@ type Conn struct {
 func newConn(
 	id string,
 	wsConn *websocket.Conn,
+	gateway *Gateway,
 	sendQueueSize int,
 	done <-chan struct{},
 	cancel context.CancelFunc,
@@ -182,6 +189,7 @@ func newConn(
 	return &Conn{
 		ID:           id,
 		wsConn:       wsConn,
+		gateway:      gateway,
 		sendCh:       make(chan protocol.ServerMessage, sendQueueSize),
 		pingCh:       make(chan struct{}, 1),
 		done:         done,
@@ -301,8 +309,103 @@ func (c *Conn) readLoop(ctx context.Context, handler MessageHandler) {
 			}
 		}
 
-		log.Printf("[ws] dispatching message conn_id=%s session_id=%s message_id=%s type=%s", c.ID, msg.SessionID, msg.MessageID, msg.Type)
-		go handler(ctx, c.ID, msg)
+		log.Printf("[ws] processing message conn_id=%s session_id=%s message_id=%s type=%s", c.ID, msg.SessionID, msg.MessageID, msg.Type)
+
+		// Only process messages with user_id (single chat)
+		if msg.UserID != "" {
+			go c.processSingleChatMessage(ctx, msg)
+		} else {
+			// For group messages (if needed), but focus on single chat first
+			go handler(ctx, c.ID, msg)
+		}
+	}
+}
+
+// processSingleChatMessage handles single chat messages by loading user settings
+// and forwarding to opencode via SSE
+func (c *Conn) processSingleChatMessage(ctx context.Context, msg protocol.Message) {
+	// Get the Gateway reference
+	g := c.gateway
+	if g == nil || g.core == nil {
+		log.Printf("[ws] gateway or core not initialized for conn_id=%s", c.ID)
+		c.Send(protocol.ServerMessage{
+			Type:      "error",
+			MessageID: msg.MessageID,
+			SessionID: msg.SessionID,
+			Timestamp: time.Now().UnixMilli(),
+			Payload: protocol.ErrorPayload{
+				Code:      "system_error",
+				Message:   "System not initialized",
+				Retryable: false,
+			},
+		})
+		return
+	}
+
+	// Load user settings from database
+	settings, err := database.GetUserSettings(ctx, msg.UserID)
+	if err != nil {
+		log.Printf("[ws] failed to load user settings conn_id=%s user_id=%s err=%v", c.ID, msg.UserID, err)
+		c.Send(protocol.ServerMessage{
+			Type:      "error",
+			MessageID: msg.MessageID,
+			SessionID: msg.SessionID,
+			Timestamp: time.Now().UnixMilli(),
+			Payload: protocol.ErrorPayload{
+				Code:      "settings_error",
+				Message:   "Failed to load user settings",
+				Retryable: true,
+			},
+		})
+		return
+	}
+
+	// Add user settings to message
+	msg.ThinkingEnabled = settings.ThinkingEnabled
+	msg.SimplifiedOutput = settings.SimplifiedOutput
+	msg.SystemPrompt = settings.SystemPrompt
+	msg.BoundModel = settings.BoundModel
+
+	log.Printf("[ws] loaded user settings conn_id=%s user_id=%s thinking=%t simplified=%t model=%s",
+		c.ID, msg.UserID, msg.ThinkingEnabled, msg.SimplifiedOutput, msg.BoundModel)
+
+	// Use HandleMessage for orchestration, it handles streaming via emitter
+	g.core.HandleMessage(ctx, c.ID, msg)
+}
+
+// streamResponses streams SSE responses back to the WebSocket client
+func (c *Conn) streamResponses(ctx context.Context, msg protocol.Message, out <-chan protocol.ServerMessage, errCh <-chan error) {
+	for {
+		select {
+		case <-ctx.Done():
+			log.Printf("[ws] stream cancelled conn_id=%s session_id=%s", c.ID, msg.SessionID)
+			return
+
+		case err, ok := <-errCh:
+			if ok {
+				log.Printf("[ws] stream error conn_id=%s err=%v", c.ID, err)
+				c.Send(protocol.ServerMessage{
+					Type:      "error",
+					MessageID: msg.MessageID,
+					SessionID: msg.SessionID,
+					Timestamp: time.Now().UnixMilli(),
+					Payload: protocol.ErrorPayload{
+						Code:      "stream_error",
+						Message:   "Stream error: " + err.Error(),
+						Retryable: false,
+					},
+				})
+			}
+			return
+
+		case resp, ok := <-out:
+			if !ok {
+				return // Stream ended
+			}
+
+			// Send the response to the client
+			c.Send(resp)
+		}
 	}
 }
 

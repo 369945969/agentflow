@@ -14,6 +14,8 @@ const routes = [
   { path: '/schedule-tasks', component: () => import('./views/ScheduleTasks.vue') },
   { path: '/skill-management', component: () => import('./views/SkillManagement.vue') },
   { path: '/single-person-chat', component: () => import('./views/SinglePersonChat.vue') },
+  { path: '/new-task', component: () => import('./views/NewTask.vue') },
+  { path: '/history-tasks', component: () => import('./views/HistoryTasks.vue') },
 ]
 
 const router = createRouter({

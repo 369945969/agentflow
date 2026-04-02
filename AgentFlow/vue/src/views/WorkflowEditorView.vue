@@ -249,7 +249,7 @@ onMounted(() => {
         </div>
         <div class="p-6 space-y-8 overflow-y-auto custom-scrollbar flex-1">
           <div class="space-y-4">
-            <h4 class="text-[10px] font-bold text-white/30 uppercase tracking-[0.2em]">数字员工</h4>
+            <h4 class="text-[10px] font-bold text-white/30 uppercase tracking-[0.2em]">AI智能体</h4>
             <div v-for="agent in digitalEmployees" :key="agent.id" 
               draggable="true" 
               @dragstart="onSidebarDragStart($event, {name: agent.name, type: 'agent', color: '#3B9BFF', icon: 'lucide:user', agentId: agent.id})" 
@@ -303,7 +303,7 @@ onMounted(() => {
               <div class="w-10 h-10 rounded-lg flex items-center justify-center text-lg shrink-0 shadow-inner" :style="{backgroundColor: node.color+'20', color: node.color}"><iconify-icon :icon="node.icon"></iconify-icon></div>
               <div class="flex-1 overflow-hidden text-left">
                 <div class="text-sm font-bold text-white/90 truncate">{{ node.name }}</div>
-                <div class="text-[9px] text-white/30 uppercase tracking-tighter">{{ node.type === 'agent' ? '数字员工' : node.type }}</div>
+                <div class="text-[9px] text-white/30 uppercase tracking-tighter">{{ node.type === 'agent' ? 'AI智能体' : node.type }}</div>
               </div>
             </div>
           </div>
@@ -370,7 +370,7 @@ onMounted(() => {
 
           <div v-else-if="nodes.find(n => n.id === selectedNodeId)?.type === 'agent'">
             <div class="space-y-4">
-              <div class="text-xs text-[#3B9BFF] font-bold uppercase tracking-widest">数字员工属性</div>
+              <div class="text-xs text-[#3B9BFF] font-bold uppercase tracking-widest">AI智能体属性</div>
               <div v-if="selectedNodeData" class="space-y-4">
                 <div class="bg-white/5 p-4 rounded-xl border border-white/10">
                   <div class="text-[10px] text-white/30 uppercase mb-1 font-bold">名称</div>

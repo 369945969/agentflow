@@ -1,7 +1,19 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick, onBeforeUnmount } from 'vue'
 import BaseLayout from '../components/BaseLayout.vue'
-import { API_BASE_URL } from '../config/api'
+import { API_BASE_URL, WEBSOCKET_URL } from '../config/api'
+import { getWebSocketInstance, type ServerMessage } from '../api/websocket'
+import { unified } from 'unified'
+import remarkParse from 'remark-parse'
+import remarkGfm from 'remark-gfm'
+import remarkBreaks from 'remark-breaks'
+import remarkRehype from 'remark-rehype'
+import rehypeHighlight from 'rehype-highlight'
+import rehypeStringify from 'rehype-stringify'
+import prettier from 'prettier/standalone'
+import prettierMarkdown from 'prettier/plugins/markdown'
+import mermaid from 'mermaid'
+import 'highlight.js/styles/atom-one-dark.css'
 
 // State
 const models = ref<any[]>([])
@@ -23,6 +35,276 @@ const leftSidebarCollapsed = ref(false) // 控制左侧边栏是否收起，默�
 const leftSidebarWidth = ref(320) // 左侧边栏宽度，可拖动调整
 const isDragging = ref(false) // 是否正在拖动分隔线
 const isInitializing = ref(false)
+const isConnected = ref(false)
+const ws = getWebSocketInstance(WEBSOCKET_URL)
+const messageListRef = ref<HTMLElement | null>(null)
+const chatInput = ref('')
+const messagesByGroup = ref<Record<string, any[]>>({})
+const pendingPlaceholders = new Map<string, boolean>()
+let mermaidInitialized = false
+let mermaidTimer: number | null = null
+
+const currentMessages = computed(() => messagesByGroup.value[activeGroupId.value] || [])
+
+const setMessagesForGroup = (groupId: string, nextMessages: any[]) => {
+  messagesByGroup.value = { ...messagesByGroup.value, [groupId]: nextMessages }
+}
+
+const mdProcessor = unified()
+  .use(remarkParse)
+  .use(remarkGfm)
+  .use(remarkBreaks)
+  .use(remarkRehype, { allowDangerousHtml: false })
+  .use(rehypeHighlight, { detect: true, ignoreMissing: true })
+  .use(rehypeStringify)
+
+const sanitizeMarkdown = (content: string) => {
+  let text = String(content || '')
+  if (!text) return ''
+  text = text.replace(/\r\n/g, '\n')
+  const lines = text.split('\n')
+  const out: string[] = []
+  let inFence = false
+
+  const splitInlineMarkers = (line: string) => {
+    let s = line
+    s = s.replace(/([^\n])(```)/g, '$1\n\n```')
+    s = s.replace(/([^\n])(#{1,6})(?=[^\s#])/g, '$1\n\n$2')
+    s = s.replace(/([^\n])-(?=[\u4E00-\u9FFFA-Za-z0-9])/g, '$1\n-')
+    return s
+  }
+
+  for (const line of lines) {
+    const isFenceLine = line.trimStart().startsWith('```')
+    if (isFenceLine) {
+      inFence = !inFence
+      out.push(line)
+      continue
+    }
+    if (inFence) {
+      out.push(line)
+      continue
+    }
+
+    const expanded = splitInlineMarkers(line)
+    if (expanded.includes('\n')) {
+      expanded.split('\n').forEach(l => out.push(l))
+      continue
+    }
+    out.push(line)
+  }
+
+  return out
+    .map(l => l.replace(/^(\s*[-*+])(\S)/, '$1 $2').replace(/^(\s*\d+)\.(\S)/, '$1. $2').replace(/^(#{1,6})(\S)/, '$1 $2'))
+    .join('\n')
+}
+
+const formatMarkdown = (content: string) => {
+  const input = sanitizeMarkdown(String(content || ''))
+  if (!input) return ''
+  try {
+    const out = prettier.format(input, {
+      parser: 'markdown',
+      plugins: [prettierMarkdown],
+      proseWrap: 'preserve',
+      printWidth: 120
+    })
+    return typeof out === 'string' ? out : input
+  } catch {
+    return input
+  }
+}
+
+const renderMarkdown = (content: string) => {
+  const input = formatMarkdown(content || '')
+  try {
+    return String(mdProcessor.processSync(input))
+  } catch {
+    const esc: Record<string, string> = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;'
+    }
+    return `<pre class="hljs"><code>${input.replace(/[&<>"']/g, (s: string) => esc[s] || s)}</code></pre>`
+  }
+}
+
+const scrollToBottom = (instant = false) => {
+  nextTick(() => {
+    const el = messageListRef.value
+    if (!el) return
+    el.scrollTo({ top: el.scrollHeight, behavior: instant ? 'auto' : 'smooth' })
+  })
+}
+
+const scheduleMermaidRender = () => {
+  if (typeof window === 'undefined') return
+  if (mermaidTimer) window.clearTimeout(mermaidTimer)
+  mermaidTimer = window.setTimeout(() => {
+    nextTick(() => {
+      const root = messageListRef.value
+      if (!root) return
+      const codeNodes = root.querySelectorAll('pre code')
+      codeNodes.forEach(code => {
+        const className = (code.getAttribute('class') || '').toLowerCase()
+        const isMermaidLang =
+          className.includes('language-mermaid') ||
+          className.includes('lang-mermaid') ||
+          className.includes('language-mermaidgraph') ||
+          className.includes('lang-mermaidgraph')
+        if (!isMermaidLang) return
+        const pre = code.parentElement
+        if (!pre || pre.tagName !== 'PRE') return
+        const anyPre = pre as HTMLElement
+        if (anyPre.dataset.mermaidDone === '1') return
+        anyPre.dataset.mermaidDone = '1'
+        const container = document.createElement('div')
+        container.className = 'mermaid'
+        let graphText = (code.textContent || '').trimStart()
+        const trimmed = graphText.trimStart()
+        if (trimmed.toLowerCase().startsWith('mermaidgraph')) {
+          graphText = trimmed.slice('mermaidgraph'.length).trimStart()
+        } else {
+          graphText = trimmed
+        }
+        if (/^(TD|LR|RL|BT)\b/.test(graphText)) {
+          graphText = `graph ${graphText}`
+        }
+        container.textContent = graphText
+        pre.replaceWith(container)
+      })
+      if (!mermaidInitialized) return
+      const nodes = root.querySelectorAll('.mermaid')
+      if (nodes.length === 0) return
+      try {
+        mermaid.run({ nodes: Array.from(nodes) as any })
+      } catch {
+      }
+    })
+  }, 60)
+}
+
+const typeOut = (messageObj: any, field: 'thinking' | 'reply', finalText: string) => {
+  const text = String(finalText || '')
+  const durationMs = Math.min(1600, Math.max(350, text.length * 2))
+  const start = performance.now()
+  messageObj[field] = messageObj[field] || {}
+  messageObj[field].isAnimating = true
+  messageObj[field].display = ''
+  messageObj[field].content = ''
+  messageObj[field].final = text
+  return new Promise<void>((resolve) => {
+    const step = (now: number) => {
+      const t = Math.min(1, (now - start) / durationMs)
+      const count = Math.min(text.length, Math.max(0, Math.floor(text.length * t)))
+      messageObj[field].display = text.slice(0, count)
+      messageObj.timestamp = Date.now()
+      scrollToBottom(true)
+      if (t >= 1) {
+        messageObj[field].isAnimating = false
+        messageObj[field].content = text
+        messageObj[field].display = ''
+        resolve()
+        scheduleMermaidRender()
+        return
+      }
+      requestAnimationFrame(step)
+    }
+    requestAnimationFrame(step)
+  })
+}
+
+const getSenderName = (senderId: string) => {
+  if (!senderId) return 'AI'
+  const group = activeGroup.value
+  const member = (group?.members || []).find((m: any) => (m.id || m) === senderId)
+  if (!member) return senderId
+  return member.name || member.id || member
+}
+
+const ensurePlaceholder = (groupId: string, messageId: string) => {
+  if (pendingPlaceholders.has(`${groupId}:${messageId}`)) return
+  pendingPlaceholders.set(`${groupId}:${messageId}`, true)
+  const next = [...(messagesByGroup.value[groupId] || [])]
+  next.push({
+    id: `placeholder:${messageId}`,
+    type: 'agent',
+    senderId: '',
+    isPlaceholder: true,
+    content: thinkingEnabled.value ? '正在推理中...' : '正在输入中...',
+    timestamp: Date.now()
+  })
+  setMessagesForGroup(groupId, next)
+  scrollToBottom(true)
+}
+
+const removePlaceholder = (groupId: string, messageId: string) => {
+  const key = `${groupId}:${messageId}`
+  if (!pendingPlaceholders.has(key)) return
+  pendingPlaceholders.delete(key)
+  const next = (messagesByGroup.value[groupId] || []).filter((m: any) => m.id !== `placeholder:${messageId}`)
+  setMessagesForGroup(groupId, next)
+}
+
+const handleWsConnectionChange = (connected: boolean) => {
+  isConnected.value = connected
+}
+
+const handleWsMessage = (message: ServerMessage) => {
+  const groupId = message.session_id || ''
+  if (!groupId) return
+  if (!messagesByGroup.value[groupId]) {
+    setMessagesForGroup(groupId, [])
+  }
+
+  if (message.type === 'stream_chunk') {
+    ensurePlaceholder(groupId, message.message_id || '')
+    return
+  }
+  if (message.type === 'stream_end') {
+    const payload: any = message.payload || {}
+    const mid = message.message_id || ''
+    removePlaceholder(groupId, mid)
+
+    const senderId = typeof payload.sender_id === 'string' ? payload.sender_id : ''
+    const thinkingText = typeof payload.thinking_content === 'string' ? payload.thinking_content : ''
+    const replyText = typeof payload.content === 'string' ? payload.content : ''
+
+    const msgObj: any = {
+      id: `agent:${mid}:${senderId}:${Date.now()}`,
+      type: 'agent',
+      senderId,
+      thinking: { content: '', isAnimating: false },
+      reply: { content: '', isAnimating: false },
+      timestamp: message.timestamp || Date.now()
+    }
+
+    const next = [...(messagesByGroup.value[groupId] || []), msgObj]
+    setMessagesForGroup(groupId, next)
+    scrollToBottom(true)
+
+    ;(async () => {
+      if (thinkingText) {
+        await typeOut(msgObj, 'thinking', thinkingText)
+      }
+      await typeOut(msgObj, 'reply', replyText)
+    })()
+    return
+  }
+}
+
+const setupWebSocket = () => {
+  ws.on('connection-change', handleWsConnectionChange)
+  ws.on('message', handleWsMessage)
+  ws.connect()
+}
+
+onBeforeUnmount(() => {
+  ws.off('connection-change', handleWsConnectionChange)
+  ws.off('message', handleWsMessage)
+})
 
 // Computed properties
 const activeGroup = computed(() => {
@@ -304,14 +586,65 @@ watch(customRuleText, () => {
 // 监听活跃群组变化
 watch(activeGroupId, () => {
   updateSettingsFromActiveGroup()
+  ws.setSession(activeGroupId.value)
+  scrollToBottom(true)
+  scheduleMermaidRender()
 })
 
+const sendChatMessage = () => {
+  const text = chatInput.value.trim()
+  const groupId = activeGroupId.value
+  if (!text || !groupId) return
+
+  ws.setSession(groupId)
+  ws.setUser('group_user')
+  const messageId = ws.sendGroupText(text, 'group_user', groupId, groupId, {
+    override_config: {
+      stream_mode: 'final_only',
+      enable_thinking: thinkingEnabled.value,
+      return_strategy: { type: 'final_only', final_result_marker: '', chunk_size: 0, debounce_ms: 0 },
+      timeout_ms: 300000,
+      max_retries: 0
+    }
+  })
+
+  const next = [...(messagesByGroup.value[groupId] || [])]
+  next.push({
+    id: `user:${messageId}`,
+    type: 'user',
+    content: text,
+    timestamp: Date.now()
+  })
+  setMessagesForGroup(groupId, next)
+  ensurePlaceholder(groupId, messageId)
+  chatInput.value = ''
+  scrollToBottom(true)
+}
+
+const handleChatKeydown = (e: KeyboardEvent) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault()
+    sendChatMessage()
+  }
+}
+
 onMounted(() => {
+  if (!mermaidInitialized) {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: 'dark',
+      securityLevel: 'strict'
+    })
+    mermaidInitialized = true
+  }
+  setupWebSocket()
   fetchModels()
   fetchAgents()
   fetchGroups().then(() => {
     // 数据加载完成后更新设置
     updateSettingsFromActiveGroup()
+    ws.setSession(activeGroupId.value)
+    scrollToBottom(true)
   })
 })
 </script>
@@ -445,16 +778,48 @@ onMounted(() => {
              </div>
            </div>
         </div>
-        <div class="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar text-[13px]">
-           <div class="flex flex-col items-center justify-center h-full text-white/30 text-[13px]">
-             <iconify-icon icon="lucide:message-square" class="text-4xl mb-4"></iconify-icon>
-             开始你的多人对话...
-           </div>
+        <div ref="messageListRef" class="flex-1 overflow-y-auto p-6 custom-scrollbar text-[13px]">
+          <div v-if="currentMessages.length === 0" class="flex flex-col items-center justify-center h-full text-white/30 text-[13px]">
+            <iconify-icon icon="lucide:message-square" class="text-4xl mb-4"></iconify-icon>
+            开始你的多人对话...
+          </div>
+          <div v-else class="space-y-6">
+            <div v-for="m in currentMessages" :key="m.id" class="flex" :class="m.type === 'user' ? 'justify-end' : 'justify-start'">
+              <div v-if="m.type === 'user'" class="max-w-[760px] rounded-2xl p-4 border bg-[#3B9BFF] text-white border-[#3B9BFF] text-[13px]">
+                <div class="whitespace-pre-wrap break-words">{{ m.content }}</div>
+                <div class="text-xs mt-2 opacity-60 text-right">{{ new Date(m.timestamp).toLocaleTimeString() }}</div>
+              </div>
+              <div v-else class="max-w-[760px] rounded-2xl p-4 border bg-white/10 text-white/90 border-white/10">
+                <div class="mb-3 flex items-center gap-2">
+                  <div class="w-8 h-8 rounded-lg bg-[#3B9BFF]/20 flex items-center justify-center text-[#3B9BFF] font-bold text-xs">
+                    {{ getSenderName(m.senderId).charAt(0) }}
+                  </div>
+                  <span class="text-xs font-semibold text-white/80">{{ getSenderName(m.senderId) }}</span>
+                </div>
+
+                <div v-if="m.thinking?.isAnimating || m.thinking?.content" class="mb-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-100/70">
+                  <div class="font-bold mb-1 flex items-center gap-2 text-xs"><iconify-icon icon="lucide:brain-circuit"></iconify-icon>推理过程</div>
+                  <pre v-if="m.thinking?.isAnimating" class="markdown-typing">{{ m.thinking.display }}</pre>
+                  <div v-else class="markdown-body break-words text-[13px]" v-html="renderMarkdown(m.thinking.content)"></div>
+                </div>
+
+                <div v-if="m.isPlaceholder" class="mt-2 inline-flex items-center gap-2 text-xs opacity-70">
+                  <span class="typing-dot"></span>
+                  <span class="typing-dot"></span>
+                  <span class="typing-dot"></span>
+                  <span class="ml-1">{{ m.content }}</span>
+                </div>
+                <pre v-else-if="m.reply?.isAnimating" class="markdown-typing">{{ m.reply.display }}</pre>
+                <div v-else class="markdown-body break-words text-[13px]" v-html="renderMarkdown(m.reply?.content || '')"></div>
+                <div class="text-xs mt-2 opacity-60">{{ new Date(m.timestamp).toLocaleTimeString() }}</div>
+              </div>
+            </div>
+          </div>
         </div>
         <div class="p-6 border-t border-white/10 bg-white/5 backdrop-blur-md shrink-0">
           <div class="flex gap-4">
-            <textarea placeholder="输入消息..." rows="1" class="flex-1 bg-white/5 border border-white/10 rounded-xl p-3 text-[13px] text-white/90 outline-none focus:border-[#3B9BFF]/50 resize-none"></textarea>
-            <button class="w-12 h-12 bg-[#3B9BFF] rounded-xl flex items-center justify-center text-white shadow-[0_0_20px_rgba(59,155,255,0.3)]"><iconify-icon icon="lucide:send" class="text-xl"></iconify-icon></button>
+            <textarea v-model="chatInput" placeholder="输入消息..." rows="1" class="flex-1 bg-white/5 border border-white/10 rounded-xl p-3 text-[13px] text-white/90 outline-none focus:border-[#3B9BFF]/50 resize-none" @keydown="handleChatKeydown"></textarea>
+            <button class="w-12 h-12 bg-[#3B9BFF] rounded-xl flex items-center justify-center text-white shadow-[0_0_20px_rgba(59,155,255,0.3)]" @click="sendChatMessage"><iconify-icon icon="lucide:send" class="text-xl"></iconify-icon></button>
           </div>
         </div>
       </main>
@@ -622,5 +987,80 @@ textarea { scrollbar-width: none; }
   writing-mode: vertical-rl;
   transform: rotate(180deg);
   text-orientation: mixed;
+}
+
+:deep(.markdown-body) {
+  line-height: 1.8;
+  word-break: break-word;
+  font-size: inherit;
+}
+
+:deep(.markdown-body ul),
+:deep(.markdown-body ol) {
+  margin: 0.5em 0 0.5em 1.1em;
+  padding-left: 1.1em;
+  list-style-position: outside;
+}
+
+:deep(.markdown-body ul) { list-style-type: disc; }
+:deep(.markdown-body ol) { list-style-type: decimal; }
+
+:deep(.markdown-body li) {
+  margin: 0.25em 0;
+}
+
+:deep(.markdown-body pre) {
+  margin: 0.8em 0;
+  padding: 0.9em 1em;
+  border-radius: 0.9rem;
+  background: rgba(0, 0, 0, 0.35);
+  overflow: auto;
+}
+
+:deep(.markdown-body pre code) {
+  padding: 0;
+  background: transparent;
+  font-size: 0.9em;
+}
+
+:deep(.markdown-body .mermaid) {
+  margin: 0.8em 0;
+  padding: 0.9em 1em;
+  border-radius: 0.9rem;
+  background: rgba(0, 0, 0, 0.25);
+  overflow: auto;
+}
+
+:deep(.markdown-body .mermaid svg) {
+  max-width: 100%;
+  height: auto;
+}
+
+.markdown-typing {
+  margin: 0.25em 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.92em;
+  line-height: 1.7;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.typing-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.6);
+  display: inline-block;
+  animation: typingBounce 1s infinite ease-in-out;
+}
+
+.typing-dot:nth-child(1) { animation-delay: 0ms; }
+.typing-dot:nth-child(2) { animation-delay: 120ms; }
+.typing-dot:nth-child(3) { animation-delay: 240ms; }
+
+@keyframes typingBounce {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+  40% { transform: translateY(-3px); opacity: 1; }
 }
 </style>
